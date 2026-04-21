@@ -1,9 +1,8 @@
 import { useState, useEffect } from "react";
-import { History, ChevronDown, ChevronRight, Trash2, Loader2, X, Sparkles } from "lucide-react";
+import { History, ChevronDown, ChevronRight, Trash2, Loader2, X } from "lucide-react";
 import { api } from "../invoke";
 import type { ProfilingRun } from "../types";
 import { ProfileSummaryCards, ProfileTable } from "./ProfilingShared";
-import { EXAMPLE_RUNS } from "./profilingExamples";
 
 function formatDate(iso: string) {
   try {
@@ -81,7 +80,6 @@ function RunCard({ run, onDelete }: { run: ProfilingRun; onDelete: (id: string) 
 export function ProfilingHistoryPage() {
   const [runs, setRuns] = useState<ProfilingRun[]>([]);
   const [loading, setLoading] = useState(true);
-  const [seeding, setSeeding] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
 
@@ -112,25 +110,8 @@ export function ProfilingHistoryPage() {
     }
   }
 
-  async function handleLoadExamples() {
-    setSeeding(true);
-    try {
-      const existingIds = new Set(runs.map(r => r.id));
-      const toAdd = EXAMPLE_RUNS.filter(r => !existingIds.has(r.id));
-      for (const run of toAdd) {
-        await api.saveProfilingRun(run);
-      }
-      await load();
-    } finally {
-      setSeeding(false);
-    }
-  }
-
-  const hasExamples = EXAMPLE_RUNS.some(e => runs.find(r => r.id === e.id));
-
   return (
     <div className="p-6 max-w-5xl">
-      {/* Header */}
       <div className="flex items-start justify-between mb-6 gap-4 flex-wrap">
         <div>
           <h1 className="text-lg font-bold">Profiling History</h1>
@@ -141,21 +122,9 @@ export function ProfilingHistoryPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          {!hasExamples && (
-            <button
-              onClick={handleLoadExamples}
-              disabled={seeding}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-opacity hover:opacity-80 disabled:opacity-50"
-              style={{ background: "var(--bg-secondary)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
-            >
-              {seeding ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
-              {seeding ? "Loading…" : "Load example data"}
-            </button>
-          )}
-
-          {runs.length > 0 && (
-            confirmClear ? (
+        {runs.length > 0 && (
+          <div className="flex items-center gap-2">
+            {confirmClear ? (
               <>
                 <span className="text-xs" style={{ color: "var(--text-secondary)" }}>Delete all runs?</span>
                 <button
@@ -183,9 +152,9 @@ export function ProfilingHistoryPage() {
               >
                 <Trash2 size={12} /> Clear All
               </button>
-            )
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </div>
 
       {loading && (
@@ -204,15 +173,6 @@ export function ProfilingHistoryPage() {
               Profile a table and results will appear here automatically
             </p>
           </div>
-          <button
-            onClick={handleLoadExamples}
-            disabled={seeding}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 transition-opacity hover:opacity-85 mt-1"
-            style={{ background: "var(--accent)", color: "#fff" }}
-          >
-            {seeding ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
-            {seeding ? "Loading…" : "Load example data"}
-          </button>
         </div>
       )}
 
