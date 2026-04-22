@@ -5,7 +5,8 @@
       "Bash(cargo check *)",
       "Bash(npx tsc *)",
       "Bash(cargo build *)",
-      "Bash(echo \"EXIT:$?\")"
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(npm run *)"
     ]
   }
 }

@@ -7,7 +7,8 @@ import type {
   QueryResult,
   Rule,
   RuleResult,
-  ColumnProfile,
+  RuleRunRecord,
+  Schedule,
   ProfilingRun,
 } from "./types";
 
@@ -48,8 +49,8 @@ export const api = {
   listRules: () =>
     invoke<Rule[]>("list_rules"),
 
-  runRule: (ruleId: string) =>
-    invoke<RuleResult>("run_rule", { ruleId }),
+  runRule: (ruleId: string, batchId?: string) =>
+    invoke<RuleResult>("run_rule", { ruleId, batchId }),
 
   runAllRules: () =>
     invoke<RuleResult[]>("run_all_rules"),
@@ -59,6 +60,27 @@ export const api = {
 
   getLastResults: () =>
     invoke<RuleResult[]>("get_last_results"),
+
+  getResultsHistory: () =>
+    invoke<RuleRunRecord[]>("get_results_history"),
+
+  clearResultsHistory: () =>
+    invoke<void>("clear_results_history"),
+
+  listSchedules: () =>
+    invoke<Schedule[]>("list_schedules"),
+
+  saveSchedule: (schedule: Schedule) =>
+    invoke<string>("save_schedule", { schedule }),
+
+  deleteSchedule: (id: string) =>
+    invoke<void>("delete_schedule", { id }),
+
+  getDueSchedules: () =>
+    invoke<Schedule[]>("get_due_schedules"),
+
+  markScheduleRan: (id: string) =>
+    invoke<Schedule>("mark_schedule_ran", { id }),
 
   runQueryPreview: (connectionId: string, sql: string) =>
     invoke<QueryResult>("run_query_preview", { connectionId, sql }),

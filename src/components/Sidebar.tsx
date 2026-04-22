@@ -1,4 +1,4 @@
-import { Database, ShieldCheck, BarChart3, ScanSearch, History } from "lucide-react";
+import { Database, ShieldCheck, BarChart3, ScanSearch, History, CalendarClock } from "lucide-react";
 import { NavLink } from "react-router-dom";
 
 const groups = [
@@ -13,6 +13,7 @@ const groups = [
     items: [
       { to: "/rules", icon: ShieldCheck, label: "Rules", end: false },
       { to: "/results", icon: BarChart3, label: "Results", end: false },
+      { to: "/scheduler", icon: CalendarClock, label: "Scheduler", end: false },
     ],
   },
   {

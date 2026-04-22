@@ -4,6 +4,7 @@ use uuid::Uuid;
 use std::collections::HashMap;
 use crate::db::{ConnectionConfig, QueryResult};
 use crate::state::AppState;
+use chrono::Utc;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -88,6 +89,37 @@ impl ResultsState {
     pub fn save(&self) -> Result<(), String> {
         let results = self.results.lock().unwrap().clone();
         crate::persistence::save(&self.data_path, &results)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RuleRunRecord {
+    pub id: String,
+    pub batch_id: String,
+    pub ran_at: String,
+    pub rule_id: String,
+    pub rule_name: String,
+    pub passed: bool,
+    pub failing_count: i64,
+    pub total_count: i64,
+    pub details: String,
+}
+
+pub struct ResultsHistoryState {
+    pub records: std::sync::Mutex<Vec<RuleRunRecord>>,
+    pub data_path: std::path::PathBuf,
+}
+
+impl ResultsHistoryState {
+    pub fn new(data_dir: &std::path::PathBuf) -> Self {
+        let data_path = data_dir.join("results_history.json");
+        let records = crate::persistence::load::<Vec<RuleRunRecord>>(&data_path).unwrap_or_default();
+        Self { records: std::sync::Mutex::new(records), data_path }
+    }
+
+    pub fn save(&self) -> Result<(), String> {
+        let records = self.records.lock().unwrap().clone();
+        crate::persistence::save(&self.data_path, &records)
     }
 }
 
@@ -290,19 +322,20 @@ pub async fn get_last_results(
     Ok(results_state.results.lock().unwrap().clone())
 }
 
-#[tauri::command]
-pub async fn run_rule(
-    rule_id: String,
-    app_state: State<'_, AppState>,
-    rules_state: State<'_, RulesState>,
-    results_state: State<'_, ResultsState>,
+async fn run_rule_inner(
+    rule_id: &str,
+    batch_id: &str,
+    app_state: &AppState,
+    rules_state: &RulesState,
+    results_state: &ResultsState,
+    history_state: &ResultsHistoryState,
 ) -> Result<RuleResult, String> {
     let rule = {
         rules_state
             .rules
             .lock()
             .unwrap()
-            .get(&rule_id)
+            .get(rule_id)
             .cloned()
             .ok_or_else(|| format!("Rule not found: {}", rule_id))?
     };
@@ -316,7 +349,6 @@ pub async fn run_rule(
             .ok_or_else(|| format!("Connection not found: {}", rule.connection_id))?
     };
 
-    // Cross-connection referential integrity: fetch ref values first, build NOT IN sql.
     let is_cross_conn_ri = matches!(
         &rule.definition,
         RuleDefinition::ReferentialIntegrity { ref_connection_id: Some(rid), .. }
@@ -359,7 +391,6 @@ pub async fn run_rule(
     let (failing_count, total_count) = if let Some(row) = qr.rows.first() {
         match &rule.definition {
             RuleDefinition::RowCount { .. } => {
-                // Query returns a single column: total_count
                 let count = row.get(0).map(parse_count).unwrap_or(0);
                 (0_i64, count)
             }
@@ -403,16 +434,16 @@ pub async fn run_rule(
     };
 
     let result = RuleResult {
-        rule_id: rule.id,
-        rule_name: rule.name,
+        rule_id: rule.id.clone(),
+        rule_name: rule.name.clone(),
         passed,
         failing_count,
         total_count,
-        details,
+        details: details.clone(),
         query_used: sql,
     };
 
-    // Update persisted results: replace existing entry for this rule or append.
+    // Update last-results (replace existing entry or append).
     {
         let mut results = results_state.results.lock().unwrap();
         if let Some(pos) = results.iter().position(|r| r.rule_id == result.rule_id) {
@@ -423,7 +454,37 @@ pub async fn run_rule(
     }
     let _ = results_state.save();
 
+    // Append to history.
+    let record = RuleRunRecord {
+        id: Uuid::new_v4().to_string(),
+        batch_id: batch_id.to_string(),
+        ran_at: Utc::now().to_rfc3339(),
+        rule_id: rule.id,
+        rule_name: rule.name,
+        passed,
+        failing_count,
+        total_count,
+        details,
+    };
+    {
+        history_state.records.lock().unwrap().push(record);
+    }
+    let _ = history_state.save();
+
     Ok(result)
+}
+
+#[tauri::command]
+pub async fn run_rule(
+    rule_id: String,
+    batch_id: Option<String>,
+    app_state: State<'_, AppState>,
+    rules_state: State<'_, RulesState>,
+    results_state: State<'_, ResultsState>,
+    history_state: State<'_, ResultsHistoryState>,
+) -> Result<RuleResult, String> {
+    let batch_id = batch_id.unwrap_or_else(|| Uuid::new_v4().to_string());
+    run_rule_inner(&rule_id, &batch_id, &app_state, &rules_state, &results_state, &history_state).await
 }
 
 #[tauri::command]
@@ -431,6 +492,7 @@ pub async fn run_all_rules(
     app_state: State<'_, AppState>,
     rules_state: State<'_, RulesState>,
     results_state: State<'_, ResultsState>,
+    history_state: State<'_, ResultsHistoryState>,
 ) -> Result<Vec<RuleResult>, String> {
     let rule_ids: Vec<String> = rules_state
         .rules
@@ -440,9 +502,10 @@ pub async fn run_all_rules(
         .cloned()
         .collect();
 
+    let batch_id = Uuid::new_v4().to_string();
     let mut results = Vec::new();
     for id in rule_ids {
-        match run_rule(id, app_state.clone(), rules_state.clone(), results_state.clone()).await {
+        match run_rule_inner(&id, &batch_id, &app_state, &rules_state, &results_state, &history_state).await {
             Ok(r) => results.push(r),
             Err(e) => results.push(RuleResult {
                 rule_id: String::new(),
@@ -456,6 +519,21 @@ pub async fn run_all_rules(
         }
     }
     Ok(results)
+}
+
+#[tauri::command]
+pub async fn get_results_history(
+    history_state: State<'_, ResultsHistoryState>,
+) -> Result<Vec<RuleRunRecord>, String> {
+    Ok(history_state.records.lock().unwrap().clone())
+}
+
+#[tauri::command]
+pub async fn clear_results_history(
+    history_state: State<'_, ResultsHistoryState>,
+) -> Result<(), String> {
+    history_state.records.lock().unwrap().clear();
+    history_state.save()
 }
 
 #[tauri::command]

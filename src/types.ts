@@ -143,3 +143,36 @@ export interface RuleResult {
   details: string;
   query_used: string;
 }
+
+export type ScheduleTarget =
+  | { type: "all" }
+  | { type: "group"; group: string }
+  | { type: "rules"; rule_ids: string[] };
+
+export type Recurrence =
+  | { type: "once"; at: string }
+  | { type: "hourly" }
+  | { type: "daily"; time: string }
+  | { type: "weekly"; day: number; time: string };
+
+export interface Schedule {
+  id: string;
+  name: string;
+  target: ScheduleTarget;
+  recurrence: Recurrence;
+  enabled: boolean;
+  last_ran_at: string | null;
+  next_run_at: string;
+}
+
+export interface RuleRunRecord {
+  id: string;
+  batch_id: string;
+  ran_at: string;
+  rule_id: string;
+  rule_name: string;
+  passed: boolean;
+  failing_count: number;
+  total_count: number;
+  details: string;
+}

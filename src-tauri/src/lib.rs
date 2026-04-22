@@ -3,8 +3,9 @@ mod persistence;
 mod state;
 mod commands;
 
-use commands::rules::{RulesState, ResultsState};
+use commands::rules::{RulesState, ResultsState, ResultsHistoryState};
 use commands::profiling::ProfilingState;
+use commands::scheduler::SchedulerState;
 use state::AppState;
 use tauri::Manager;
 
@@ -19,7 +20,9 @@ pub fn run() {
             app.manage(AppState::new(&data_dir));
             app.manage(RulesState::new(&data_dir));
             app.manage(ResultsState::new(&data_dir));
+            app.manage(ResultsHistoryState::new(&data_dir));
             app.manage(ProfilingState::new(&data_dir));
+            app.manage(SchedulerState::new(&data_dir));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -39,7 +42,14 @@ pub fn run() {
             commands::rules::run_all_rules,
             commands::rules::get_failing_rows,
             commands::rules::get_last_results,
+            commands::rules::get_results_history,
+            commands::rules::clear_results_history,
             commands::rules::run_query_preview,
+            commands::scheduler::list_schedules,
+            commands::scheduler::save_schedule,
+            commands::scheduler::delete_schedule,
+            commands::scheduler::get_due_schedules,
+            commands::scheduler::mark_schedule_ran,
             commands::profiling::profile_table,
             commands::profiling::sample_table,
             commands::profiling::list_profiling_runs,
