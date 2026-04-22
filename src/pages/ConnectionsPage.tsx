@@ -477,13 +477,13 @@ export function ConnectionsPage() {
               </div>
               <div className="flex items-center gap-2">
                 {connStatus[conn.id] === "testing" && (
-                  <Loader2 size={15} className="animate-spin" style={{ color: "var(--text-secondary)" }} title="Testing connection…" />
+                  <span title="Testing connection…"><Loader2 size={15} className="animate-spin" style={{ color: "var(--text-secondary)" }} /></span>
                 )}
                 {connStatus[conn.id] === "ok" && (
-                  <CheckCircle2 size={15} style={{ color: "var(--success)" }} title="Connection OK" />
+                  <span title="Connection OK"><CheckCircle2 size={15} style={{ color: "var(--success)" }} /></span>
                 )}
                 {connStatus[conn.id] === "error" && (
-                  <XCircle size={15} style={{ color: "var(--danger)" }} title="Connection failed" />
+                  <span title="Connection failed"><XCircle size={15} style={{ color: "var(--danger)" }} /></span>
                 )}
                 <button onClick={() => setEditing(conn)} className="p-2 rounded opacity-50 hover:opacity-100 transition-opacity" style={{ color: "var(--text-secondary)" }} title="Edit">
                   <Pencil size={14} />
