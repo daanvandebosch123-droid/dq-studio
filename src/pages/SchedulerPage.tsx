@@ -1,5 +1,9 @@
+<<<<<<< HEAD
 import { useState, useEffect, useCallback, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
+=======
+import { useState, useEffect, useCallback } from "react";
+>>>>>>> origin/main
 import { Plus, Play, Trash2, Clock, CheckCircle2, XCircle, Calendar, ToggleLeft, ToggleRight, Edit2 } from "lucide-react";
 import { api } from "../invoke";
 import type { Schedule, ScheduleTarget, Recurrence, Rule } from "../types";
@@ -67,6 +71,7 @@ function emptySchedule(): Schedule {
   };
 }
 
+<<<<<<< HEAD
 function toLocalDateTimeInputValue(date: Date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -76,6 +81,8 @@ function toLocalDateTimeInputValue(date: Date) {
   return `${year}-${month}-${day}T${hours}:${minutes}`;
 }
 
+=======
+>>>>>>> origin/main
 // ── Schedule form modal ────────────────────────────────────────────────────
 
 function ScheduleModal({
@@ -200,7 +207,11 @@ function ScheduleModal({
                 onClick={() => {
                   if (t === "once") {
                     const d = new Date(); d.setMinutes(d.getMinutes() + 60, 0, 0);
+<<<<<<< HEAD
                     setRecurrence({ type: "once", at: toLocalDateTimeInputValue(d) });
+=======
+                    setRecurrence({ type: "once", at: d.toISOString().slice(0, 16) });
+>>>>>>> origin/main
                   } else if (t === "hourly") setRecurrence({ type: "hourly" });
                   else if (t === "daily") setRecurrence({ type: "daily", time: "08:00" });
                   else setRecurrence({ type: "weekly", day: 0, time: "08:00" });
@@ -381,9 +392,12 @@ export function SchedulerPage() {
   const [runningId, setRunningId] = useState<string | null>(null);
   const [lastRunResult, setLastRunResult] = useState<{ id: string; ok: boolean; msg: string } | null>(null);
 
+<<<<<<< HEAD
   const rulesRef = useRef<Rule[]>([]);
   useEffect(() => { rulesRef.current = rules; }, [rules]);
 
+=======
+>>>>>>> origin/main
   const groups = [...new Set(rules.map(r => r.group).filter(Boolean) as string[])].sort();
 
   async function load() {
@@ -392,6 +406,7 @@ export function SchedulerPage() {
     setRules(r);
   }
 
+<<<<<<< HEAD
   useEffect(() => {
     load();
     const unlisten = listen("schedules://changed", () => load());
@@ -399,13 +414,35 @@ export function SchedulerPage() {
   }, []);
 
   const executeSchedule = useCallback(async (schedule: Schedule) => {
+=======
+  useEffect(() => { load(); }, []);
+
+  // Auto-check due schedules every 60 seconds
+  const checkDue = useCallback(async () => {
+    const due = await api.getDueSchedules();
+    for (const s of due) {
+      await executeSchedule(s);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const id = setInterval(checkDue, 60_000);
+    return () => clearInterval(id);
+  }, [checkDue]);
+
+  async function executeSchedule(schedule: Schedule) {
+>>>>>>> origin/main
     const batchId = crypto.randomUUID();
     try {
       if (schedule.target.type === "all") {
         await api.runAllRules();
       } else if (schedule.target.type === "group") {
         const groupName = (schedule.target as { type: "group"; group: string }).group;
+<<<<<<< HEAD
         const groupRules = rulesRef.current.filter(r => r.group === groupName);
+=======
+        const groupRules = rules.filter(r => r.group === groupName);
+>>>>>>> origin/main
         for (const r of groupRules) await api.runRule(r.id, batchId);
       } else if (schedule.target.type === "rules") {
         for (const id of (schedule.target as { type: "rules"; rule_ids: string[] }).rule_ids) {
@@ -418,6 +455,7 @@ export function SchedulerPage() {
     } catch (e) {
       setLastRunResult({ id: schedule.id, ok: false, msg: String(e) });
     }
+<<<<<<< HEAD
   }, []);
 
   // Auto-check due schedules every 60 seconds
@@ -432,6 +470,9 @@ export function SchedulerPage() {
     const id = setInterval(checkDue, 60_000);
     return () => clearInterval(id);
   }, [checkDue]);
+=======
+  }
+>>>>>>> origin/main
 
   async function runNow(schedule: Schedule) {
     setRunningId(schedule.id);
@@ -444,7 +485,15 @@ export function SchedulerPage() {
   }
 
   async function handleSave(s: Schedule) {
+<<<<<<< HEAD
     const id = await api.saveSchedule(s);
+=======
+    // Convert datetime-local string to full ISO for Once schedules
+    const normalized = s.recurrence.type === "once"
+      ? { ...s, recurrence: { type: "once" as const, at: new Date(s.recurrence.at).toISOString() } }
+      : s;
+    const id = await api.saveSchedule(normalized);
+>>>>>>> origin/main
     await load();
     return id;
   }
@@ -456,8 +505,14 @@ export function SchedulerPage() {
   }
 
   async function handleToggle(schedule: Schedule) {
+<<<<<<< HEAD
     await api.saveSchedule({ ...schedule, enabled: !schedule.enabled });
     await load();
+=======
+    const updated = { ...schedule, enabled: !schedule.enabled };
+    await api.saveSchedule(updated);
+    setSchedules(prev => prev.map(s => s.id === schedule.id ? updated : s));
+>>>>>>> origin/main
   }
 
   return (

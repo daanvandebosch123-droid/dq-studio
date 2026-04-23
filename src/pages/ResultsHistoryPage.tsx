@@ -19,6 +19,15 @@ function fmtDate(iso: string) {
     " " + d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 }
 
+<<<<<<< HEAD
+=======
+function fmtDateShort(iso: string) {
+  const d = new Date(iso);
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" }) +
+    " " + d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+}
+
+>>>>>>> origin/main
 interface Batch {
   batch_id: string;
   ran_at: string;
@@ -54,6 +63,7 @@ function groupIntoBatches(records: RuleRunRecord[]): Batch[] {
 
 // ── per-rule trend chart ───────────────────────────────────────────────────
 
+<<<<<<< HEAD
 function RuleTrendChart({ ruleId, batches }: { ruleId: string; batches: Batch[] }) {
   const data = batches
     .map(b => {
@@ -61,6 +71,15 @@ function RuleTrendChart({ ruleId, batches }: { ruleId: string; batches: Batch[] 
       if (!rec) return null;
       return {
         date: fmtDate(b.ran_at),
+=======
+function RuleTrendChart({ ruleName, batches }: { ruleName: string; batches: Batch[] }) {
+  const data = batches
+    .map(b => {
+      const rec = b.records.find(r => r.rule_name === ruleName);
+      if (!rec) return null;
+      return {
+        date: fmtDateShort(b.ran_at),
+>>>>>>> origin/main
         failing: rec.failing_count,
         total: rec.total_count,
         passed: rec.passed ? 1 : 0,
@@ -147,7 +166,11 @@ function BatchRow({ batch, allBatches }: { batch: Batch; allBatches: Batch[] }) 
               </div>
               {expandedRule === r.rule_name && (
                 <div className="px-4 pb-3" style={{ background: r.passed ? "var(--bg-secondary)" : "rgba(239,68,68,0.03)" }}>
+<<<<<<< HEAD
                   <RuleTrendChart ruleId={r.rule_id} batches={allBatches} />
+=======
+                  <RuleTrendChart ruleName={r.rule_name} batches={allBatches} />
+>>>>>>> origin/main
                 </div>
               )}
             </div>
@@ -164,7 +187,11 @@ function OverallTrendChart({ batches }: { batches: Batch[] }) {
   if (batches.length < 2) return null;
 
   const data = batches.map(b => ({
+<<<<<<< HEAD
     date: fmtDate(b.ran_at),
+=======
+    date: fmtDateShort(b.ran_at),
+>>>>>>> origin/main
     "Pass rate": b.pass_rate,
     Passed: b.passed,
     Failed: b.failed,
@@ -195,6 +222,7 @@ function OverallTrendChart({ batches }: { batches: Batch[] }) {
 // ── per-rule summary table ─────────────────────────────────────────────────
 
 function RuleSummaryTable({ batches }: { batches: Batch[] }) {
+<<<<<<< HEAD
   const ruleEntries = useMemo(() => {
     const map = new Map<string, string>();
     for (const b of batches) for (const r of b.records) map.set(r.rule_id, r.rule_name);
@@ -202,6 +230,15 @@ function RuleSummaryTable({ batches }: { batches: Batch[] }) {
   }, [batches]);
 
   if (ruleEntries.length === 0 || batches.length < 2) return null;
+=======
+  const ruleNames = useMemo(() => {
+    const names = new Set<string>();
+    for (const b of batches) for (const r of b.records) names.add(r.rule_name);
+    return [...names].sort();
+  }, [batches]);
+
+  if (ruleNames.length === 0 || batches.length < 2) return null;
+>>>>>>> origin/main
 
   return (
     <div className="rounded-lg overflow-hidden mb-6" style={{ border: "1px solid var(--border)" }}>
@@ -220,16 +257,26 @@ function RuleSummaryTable({ batches }: { batches: Batch[] }) {
             </tr>
           </thead>
           <tbody>
+<<<<<<< HEAD
             {ruleEntries.map(([ruleId, ruleName]) => {
               const recs = batches.flatMap(b => b.records.filter(r => r.rule_id === ruleId));
+=======
+            {ruleNames.map(name => {
+              const recs = batches.flatMap(b => b.records.filter(r => r.rule_name === name));
+>>>>>>> origin/main
               const passCount = recs.filter(r => r.passed).length;
               const rate = recs.length > 0 ? Math.round((passCount / recs.length) * 100) : 0;
               const last = recs[recs.length - 1];
               const recentStatuses = recs.slice(-5).map(r => r.passed);
 
               return (
+<<<<<<< HEAD
                 <tr key={ruleId} style={{ borderTop: "1px solid var(--border)", background: "var(--bg-secondary)" }}>
                   <td className="px-4 py-2 font-medium" style={{ color: "var(--text-primary)" }}>{ruleName}</td>
+=======
+                <tr key={name} style={{ borderTop: "1px solid var(--border)", background: "var(--bg-secondary)" }}>
+                  <td className="px-4 py-2 font-medium" style={{ color: "var(--text-primary)" }}>{name}</td>
+>>>>>>> origin/main
                   <td className="px-3 py-2 text-center" style={{ color: "var(--text-secondary)" }}>{recs.length}</td>
                   <td className="px-3 py-2 text-center font-semibold" style={{ color: rate === 100 ? C_PASS : rate < 50 ? C_FAIL : "var(--text-primary)" }}>
                     {rate}%
