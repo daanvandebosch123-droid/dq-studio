@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir \"D:\\\\FP\\\\dq-studio\")",
+      "Bash(cargo check *)",
+      "Bash(npx tsc *)",
+      "Bash(cargo build *)",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(npm run *)",
+      "Bash(ls -la \"D:\\\\\\\\DQ\\\\\\\\dq-studio-main\")"
+    ]
+  }
+}
