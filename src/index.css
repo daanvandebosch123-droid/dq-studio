@@ -1,7 +1,11 @@
 @import "tailwindcss";
 
+<<<<<<< HEAD
 :root,
 [data-theme="dark"] {
+=======
+:root {
+>>>>>>> origin/main
   --bg-primary: #0f172a;
   --bg-secondary: #1e293b;
   --bg-tertiary: #334155;
@@ -15,6 +19,7 @@
   --warning: #f59e0b;
 }
 
+<<<<<<< HEAD
 [data-theme="light"] {
   --bg-primary: #e8edf2;
   --bg-secondary: #f1f5f9;
@@ -29,6 +34,8 @@
   --warning: #d97706;
 }
 
+=======
+>>>>>>> origin/main
 * {
   box-sizing: border-box;
 }

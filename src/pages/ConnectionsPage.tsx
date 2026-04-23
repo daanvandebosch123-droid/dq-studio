@@ -1,5 +1,8 @@
 import { useState, useEffect } from "react";
+<<<<<<< HEAD
 import { listen } from "@tauri-apps/api/event";
+=======
+>>>>>>> origin/main
 import { Plus, Trash2, RefreshCw, CheckCircle2, XCircle, Pencil, ChevronDown, Loader2 } from "lucide-react";
 import { api } from "../invoke";
 import type { ConnectionConfig, ConnectionInfo, SqlServerConfig, OracleConfig, SnowflakeConfig, Db2Config, CsvConfig, ExcelConfig } from "../types";
@@ -92,7 +95,10 @@ function ConnectionForm({
     : ""
   );
   const [browsing, setBrowsing] = useState(false);
+<<<<<<< HEAD
   const [saveError, setSaveError] = useState<string | null>(null);
+=======
+>>>>>>> origin/main
 
   // Pre-populate databases list when editing an existing connection
   useEffect(() => {
@@ -165,11 +171,16 @@ function ConnectionForm({
   async function handleSave() {
     if (!name.trim()) return;
     setSaving(true);
+<<<<<<< HEAD
     setSaveError(null);
     try {
       await onSave(name, buildConfig());
     } catch (e: unknown) {
       setSaveError(String(e));
+=======
+    try {
+      await onSave(name, buildConfig());
+>>>>>>> origin/main
     } finally {
       setSaving(false);
     }
@@ -368,6 +379,7 @@ function ConnectionForm({
         </div>
       )}
 
+<<<<<<< HEAD
       {saveError && (
         <div className="flex items-start gap-2 text-sm p-3 rounded bg-red-900/30 text-red-400">
           <XCircle size={16} className="mt-0.5 shrink-0" />
@@ -375,6 +387,8 @@ function ConnectionForm({
         </div>
       )}
 
+=======
+>>>>>>> origin/main
       <div className="flex gap-2 pt-2">
         {dbType !== "csv" && dbType !== "excel" && (
           <button
@@ -411,7 +425,10 @@ export function ConnectionsPage() {
   const [showAdd, setShowAdd] = useState(false);
   const [editing, setEditing] = useState<ConnectionInfo | null>(null);
   const [connStatus, setConnStatus] = useState<Record<string, ConnStatus>>({});
+<<<<<<< HEAD
   const [loadError, setLoadError] = useState<string | null>(null);
+=======
+>>>>>>> origin/main
 
   async function testConnections(conns: ConnectionInfo[]) {
     setConnStatus(Object.fromEntries(conns.map(c => [c.id, "testing"])));
@@ -426,6 +443,7 @@ export function ConnectionsPage() {
   }
 
   async function load() {
+<<<<<<< HEAD
     try {
       const conns = await api.listConnections();
       setConnections(conns);
@@ -441,6 +459,14 @@ export function ConnectionsPage() {
     const unlisten = listen("connections://changed", () => load());
     return () => { unlisten.then(f => f()); };
   }, []);
+=======
+    const conns = await api.listConnections();
+    setConnections(conns);
+    testConnections(conns);
+  }
+
+  useEffect(() => { load(); }, []);
+>>>>>>> origin/main
 
   async function handleAdd(name: string, config: ConnectionConfig) {
     await api.addConnection(name, config);
@@ -456,7 +482,10 @@ export function ConnectionsPage() {
   }
 
   async function handleDelete(id: string) {
+<<<<<<< HEAD
     if (!confirm("Delete this connection?")) return;
+=======
+>>>>>>> origin/main
     await api.removeConnection(id);
     load();
   }
@@ -477,6 +506,7 @@ export function ConnectionsPage() {
         </button>
       </div>
 
+<<<<<<< HEAD
       {loadError && (
         <div className="flex items-start gap-2 text-sm p-3 mb-4 rounded bg-red-900/30 text-red-400">
           <XCircle size={16} className="mt-0.5 shrink-0" />
@@ -484,6 +514,8 @@ export function ConnectionsPage() {
         </div>
       )}
 
+=======
+>>>>>>> origin/main
       {connections.length === 0 ? (
         <div className="text-center py-16 rounded-lg" style={{ border: "1px dashed var(--border)" }}>
           <p style={{ color: "var(--text-secondary)" }}>No connections yet. Add your first one.</p>

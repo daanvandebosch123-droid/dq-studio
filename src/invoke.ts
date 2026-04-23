@@ -102,6 +102,7 @@ export const api = {
 
   clearProfilingRuns: () =>
     invoke<void>("clear_profiling_runs"),
+<<<<<<< HEAD
 
   getSettings: () =>
     invoke<{ data_dir: string; default_data_dir: string; is_custom: boolean }>("get_settings"),
@@ -111,4 +112,6 @@ export const api = {
 
   pickDirectory: () =>
     invoke<string | null>("pick_directory"),
+=======
+>>>>>>> origin/main
 };

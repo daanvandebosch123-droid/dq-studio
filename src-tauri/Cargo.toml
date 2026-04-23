@@ -37,5 +37,8 @@ csv = "1"
 calamine = { version = "0.26", features = ["dates"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
 rfd = "0.15"
+<<<<<<< HEAD
 notify = "6"
+=======
+>>>>>>> origin/main
 
