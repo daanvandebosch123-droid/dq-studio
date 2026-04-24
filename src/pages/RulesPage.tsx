@@ -1,16 +1,9 @@
 import { useState, useEffect, useRef } from "react";
-<<<<<<< HEAD
 import { listen } from "@tauri-apps/api/event";
 import {
   Plus, Trash2, Play, Pencil, Table2, ChevronDown, ChevronRight,
   PlayCircle, FolderPlus, GripVertical, X, ShieldCheck, Loader2,
   CheckCircle2, XCircle, FileText, RefreshCw,
-=======
-import {
-  Plus, Trash2, Play, Pencil, Table2, ChevronDown, ChevronRight,
-  PlayCircle, FolderPlus, GripVertical, X, ShieldCheck, Loader2,
-  CheckCircle2, XCircle, FileText,
->>>>>>> origin/main
 } from "lucide-react";
 import { api } from "../invoke";
 import type {
@@ -729,10 +722,7 @@ function RuleGroup({
   onDelete,
   onViewRows,
   onDeleteGroup,
-<<<<<<< HEAD
   onRenameGroup,
-=======
->>>>>>> origin/main
 }: {
   name: string;
   rules: Rule[];
@@ -753,7 +743,6 @@ function RuleGroup({
   onDelete: (id: string) => void;
   onViewRows: (ruleId: string, ruleName: string) => void;
   onDeleteGroup: (name: string) => void;
-<<<<<<< HEAD
   onRenameGroup: (oldName: string, newName: string) => void;
 }) {
   const [collapsed, setCollapsed] = useState(false);
@@ -767,10 +756,6 @@ function RuleGroup({
     setRenaming(false);
   }
   function cancelRename() { setRenaming(false); setRenameValue(""); }
-=======
-}) {
-  const [collapsed, setCollapsed] = useState(false);
->>>>>>> origin/main
 
   const ruleResults = rules.map(r => lastResults[r.id]).filter(Boolean);
   const allRan = rules.length > 0 && ruleResults.length === rules.length;
@@ -798,7 +783,6 @@ function RuleGroup({
         onDragOver={e => e.preventDefault()}
       >
         <div
-<<<<<<< HEAD
           className="flex items-center gap-2.5 flex-1 min-w-0"
           style={{ cursor: renaming ? "default" : "pointer" }}
           onClick={() => !renaming && setCollapsed(c => !c)}
@@ -892,57 +876,6 @@ function RuleGroup({
               </button>
             </>
           )}
-=======
-          className="flex items-center gap-2.5 cursor-pointer flex-1 min-w-0"
-          onClick={() => setCollapsed(c => !c)}
-        >
-          {collapsed
-            ? <ChevronRight size={13} style={{ color: "var(--text-secondary)" }} />
-            : <ChevronDown size={13} style={{ color: "var(--text-secondary)" }} />
-          }
-          <span className="font-semibold text-sm truncate">{name}</span>
-          <span
-            className="text-xs px-1.5 py-0.5 rounded-full"
-            style={{ background: "rgba(148,163,184,0.12)", color: "var(--text-secondary)" }}
-          >
-            {rules.length}
-          </span>
-          {allRan && (
-            failCount === 0 ? (
-              <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: "rgba(34,197,94,0.12)", color: "var(--success)" }}>
-                <CheckCircle2 size={11} /> All passed
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: "rgba(239,68,68,0.12)", color: "var(--danger)" }}>
-                <XCircle size={11} /> {failCount} failed
-                {passCount > 0 && <span style={{ opacity: 0.6 }}>· {passCount} passed</span>}
-              </span>
-            )
-          )}
-        </div>
-        <div className="flex items-center gap-1 shrink-0 ml-2">
-          <button
-            onClick={e => { e.stopPropagation(); onRunGroup(name, rules); }}
-            disabled={groupRunning || rules.length === 0}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-40 transition-opacity hover:opacity-80"
-            style={{ background: "var(--accent)", color: "#fff" }}
-            title="Run all rules in this group"
-          >
-            {groupRunning
-              ? <Loader2 size={11} className="animate-spin" />
-              : <PlayCircle size={11} />
-            }
-            {groupRunning ? "Running…" : "Run Group"}
-          </button>
-          <button
-            onClick={e => { e.stopPropagation(); onDeleteGroup(name); }}
-            className="p-1.5 rounded-lg transition-opacity opacity-30 hover:opacity-100"
-            style={{ color: "var(--danger)" }}
-            title="Delete group"
-          >
-            <Trash2 size={12} />
-          </button>
->>>>>>> origin/main
         </div>
       </div>
 
@@ -995,10 +928,7 @@ export function RulesPage() {
   const [lastResults, setLastResults] = useState<Record<string, { passed: boolean; details: string }>>({});
   const [viewingRows, setViewingRows] = useState<{ ruleId: string; ruleName: string } | null>(null);
 
-<<<<<<< HEAD
   const [refreshing, setRefreshing] = useState(false);
-=======
->>>>>>> origin/main
   const [emptyGroups, setEmptyGroups] = useState<string[]>([]);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
@@ -1016,15 +946,11 @@ export function RulesPage() {
     setLastResults(map);
   }
 
-<<<<<<< HEAD
   useEffect(() => {
     load();
     const unlisten = listen("rules://changed", () => load());
     return () => { unlisten.then(f => f()); };
   }, []);
-=======
-  useEffect(() => { load(); }, []);
->>>>>>> origin/main
 
   async function handleSave(rule: Omit<Rule, "id"> & { id: string }) {
     await api.saveRule(rule);
@@ -1034,10 +960,7 @@ export function RulesPage() {
   }
 
   async function handleDelete(id: string) {
-<<<<<<< HEAD
     if (!confirm("Delete this rule?")) return;
-=======
->>>>>>> origin/main
     await api.deleteRule(id);
     load();
   }
@@ -1047,11 +970,8 @@ export function RulesPage() {
     try {
       const result = await api.runRule(rule.id);
       setLastResults(prev => ({ ...prev, [rule.id]: { passed: result.passed, details: result.details } }));
-<<<<<<< HEAD
     } catch (e) {
       setLastResults(prev => ({ ...prev, [rule.id]: { passed: false, details: String(e) } }));
-=======
->>>>>>> origin/main
     } finally {
       setRunning(null);
     }
@@ -1065,13 +985,9 @@ export function RulesPage() {
         try {
           const result = await api.runRule(rule.id);
           setLastResults(prev => ({ ...prev, [rule.id]: { passed: result.passed, details: result.details } }));
-<<<<<<< HEAD
         } catch (e) {
           setLastResults(prev => ({ ...prev, [rule.id]: { passed: false, details: String(e) } }));
         }
-=======
-        } catch { /* continue */ }
->>>>>>> origin/main
       }
     } finally {
       setRunning(null);
@@ -1090,7 +1006,6 @@ export function RulesPage() {
     setShowCreateGroup(false);
   }
 
-<<<<<<< HEAD
   async function handleDeleteGroup(groupName: string) {
     setEmptyGroups(prev => prev.filter(g => g !== groupName));
     const groupRules = rules.filter(r => r.group === groupName);
@@ -1103,12 +1018,6 @@ export function RulesPage() {
     const groupRules = rules.filter(r => r.group === oldName);
     await Promise.all(groupRules.map(rule => api.saveRule({ ...rule, group: newName })));
     load();
-=======
-  function handleDeleteGroup(groupName: string) {
-    setEmptyGroups(prev => prev.filter(g => g !== groupName));
-    const groupRules = rules.filter(r => r.group === groupName);
-    Promise.all(groupRules.map(rule => api.saveRule({ ...rule, group: undefined }))).then(load);
->>>>>>> origin/main
   }
 
   async function handleDrop(ruleId: string | null | undefined, targetGroup: string | null) {
@@ -1207,7 +1116,6 @@ export function RulesPage() {
         </div>
 
         <div className="flex items-center gap-2">
-<<<<<<< HEAD
           <button
             onClick={async () => { setRefreshing(true); try { await load(); } finally { setRefreshing(false); } }}
             disabled={refreshing}
@@ -1217,8 +1125,6 @@ export function RulesPage() {
           >
             <RefreshCw size={13} className={refreshing ? "animate-spin" : ""} />
           </button>
-=======
->>>>>>> origin/main
           {showCreateGroup ? (
             <div className="flex items-center gap-2">
               <input
@@ -1298,10 +1204,7 @@ export function RulesPage() {
               onDrop={ruleId => handleDrop(ruleId, groupName)}
               onRunGroup={handleRunGroup}
               onDeleteGroup={handleDeleteGroup}
-<<<<<<< HEAD
               onRenameGroup={handleRenameGroup}
-=======
->>>>>>> origin/main
               {...sharedDragProps}
               {...sharedActionProps}
             />
@@ -1319,10 +1222,7 @@ export function RulesPage() {
               onDrop={ruleId => handleDrop(ruleId, null)}
               onRunGroup={handleRunGroup}
               onDeleteGroup={() => {}}
-<<<<<<< HEAD
               onRenameGroup={() => {}}
-=======
->>>>>>> origin/main
               {...sharedDragProps}
               {...sharedActionProps}
             />

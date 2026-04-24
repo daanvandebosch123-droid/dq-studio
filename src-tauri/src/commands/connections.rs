@@ -50,13 +50,8 @@ pub async fn remove_connection(
 pub async fn list_connections(
     state: State<'_, AppState>,
 ) -> Result<Vec<ConnectionInfo>, String> {
-<<<<<<< HEAD
     state.reload();
     Ok(state.connections.lock().unwrap().values().cloned().collect())
-=======
-    let conns = state.connections.lock().unwrap();
-    Ok(conns.values().cloned().collect())
->>>>>>> origin/main
 }
 
 #[tauri::command]

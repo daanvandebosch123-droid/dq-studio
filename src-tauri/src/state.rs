@@ -19,7 +19,6 @@ impl AppState {
         Self { connections: Mutex::new(connections), data_path }
     }
 
-<<<<<<< HEAD
     pub fn reload(&self) {
         let connections = crate::persistence::load::<Vec<ConnectionInfo>>(&self.data_path)
             .unwrap_or_default()
@@ -29,8 +28,6 @@ impl AppState {
         *self.connections.lock().unwrap() = connections;
     }
 
-=======
->>>>>>> origin/main
     pub fn save(&self) -> Result<(), String> {
         let conns: Vec<ConnectionInfo> = self.connections.lock().unwrap().values().cloned().collect();
         crate::persistence::save(&self.data_path, &conns)

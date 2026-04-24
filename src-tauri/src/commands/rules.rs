@@ -68,7 +68,6 @@ impl RulesState {
         Self { rules: std::sync::Mutex::new(rules), data_path }
     }
 
-<<<<<<< HEAD
     pub fn reload(&self) {
         let rules = crate::persistence::load::<Vec<Rule>>(&self.data_path)
             .unwrap_or_default()
@@ -78,8 +77,6 @@ impl RulesState {
         *self.rules.lock().unwrap() = rules;
     }
 
-=======
->>>>>>> origin/main
     pub fn save(&self) -> Result<(), String> {
         let rules: Vec<Rule> = self.rules.lock().unwrap().values().cloned().collect();
         crate::persistence::save(&self.data_path, &rules)
@@ -98,15 +95,12 @@ impl ResultsState {
         Self { results: std::sync::Mutex::new(results), data_path }
     }
 
-<<<<<<< HEAD
     pub fn reload(&self) {
         let results = crate::persistence::load::<Vec<RuleResult>>(&self.data_path)
             .unwrap_or_default();
         *self.results.lock().unwrap() = results;
     }
 
-=======
->>>>>>> origin/main
     pub fn save(&self) -> Result<(), String> {
         let results = self.results.lock().unwrap().clone();
         crate::persistence::save(&self.data_path, &results)
@@ -138,15 +132,12 @@ impl ResultsHistoryState {
         Self { records: std::sync::Mutex::new(records), data_path }
     }
 
-<<<<<<< HEAD
     pub fn reload(&self) {
         let records = crate::persistence::load::<Vec<RuleRunRecord>>(&self.data_path)
             .unwrap_or_default();
         *self.records.lock().unwrap() = records;
     }
 
-=======
->>>>>>> origin/main
     pub fn save(&self) -> Result<(), String> {
         let records = self.records.lock().unwrap().clone();
         crate::persistence::save(&self.data_path, &records)
@@ -155,7 +146,6 @@ impl ResultsHistoryState {
 
 enum DbKind { SqlServer, Oracle, Snowflake, Db2, File }
 
-<<<<<<< HEAD
 fn quote_ident(name: &str, kind: &DbKind) -> String {
     match kind {
         DbKind::SqlServer => format!("[{}]", name.replace(']', "]]")),
@@ -173,8 +163,6 @@ fn quote_string_literal(value: &str) -> String {
     format!("'{}'", value.replace('\'', "''"))
 }
 
-=======
->>>>>>> origin/main
 fn limit_sql(inner: &str, n: usize, kind: &DbKind) -> String {
     match kind {
         DbKind::SqlServer => inner.replacen("SELECT ", &format!("SELECT TOP {} ", n), 1),
@@ -196,7 +184,6 @@ fn db_kind(config: &ConnectionConfig) -> DbKind {
 }
 
 fn build_failing_rows_sql(schema: &str, table: &str, def: &RuleDefinition, kind: &DbKind) -> Option<String> {
-<<<<<<< HEAD
     let q = quote_qualified_name(schema, table, kind);
     let sql = match def {
         RuleDefinition::NotNull { column } =>
@@ -229,29 +216,12 @@ fn build_failing_rows_sql(schema: &str, table: &str, def: &RuleDefinition, kind:
                 quote_ident(ref_column, kind),
                 quote_qualified_name(ref_schema, ref_table, kind)
             ),
-=======
-    let q = format!("{}.{}", schema, table);
-    let sql = match def {
-        RuleDefinition::NotNull { column } =>
-            format!("SELECT * FROM {} WHERE {} IS NULL", q, column),
-        RuleDefinition::Unique { column } =>
-            format!("SELECT * FROM {} WHERE {} IN (SELECT {} FROM {} GROUP BY {} HAVING COUNT(*) > 1)", q, column, column, q, column),
-        RuleDefinition::MinValue { column, min } =>
-            format!("SELECT * FROM {} WHERE {} < {}", q, column, min),
-        RuleDefinition::MaxValue { column, max } =>
-            format!("SELECT * FROM {} WHERE {} > {}", q, column, max),
-        RuleDefinition::Regex { column, pattern } =>
-            format!("SELECT * FROM {} WHERE {} NOT LIKE '{}'", q, column, pattern),
-        RuleDefinition::ReferentialIntegrity { column, ref_schema, ref_table, ref_column, .. } =>
-            format!("SELECT * FROM {} WHERE {} NOT IN (SELECT {} FROM {}.{})", q, column, ref_column, ref_schema, ref_table),
->>>>>>> origin/main
         RuleDefinition::CustomSql { sql } => sql.clone(),
         RuleDefinition::RowCount { .. } => return None,
     };
     Some(limit_sql(&sql, 500, kind))
 }
 
-<<<<<<< HEAD
 fn build_rule_sql(schema: &str, table: &str, def: &RuleDefinition, kind: &DbKind) -> String {
     let qualified = quote_qualified_name(schema, table, kind);
     match def {
@@ -276,41 +246,12 @@ fn build_rule_sql(schema: &str, table: &str, def: &RuleDefinition, kind: &DbKind
             quote_ident(column, kind), quote_string_literal(pattern), qualified
         ),
         RuleDefinition::ReferentialIntegrity { column, ref_schema, ref_table, ref_column, .. } => format!(
-            "SELECT SUM(CASE WHEN r.{} IS NULL THEN 1 ELSE 0 END) as failing_count, COUNT(*) as total_count FROM {} t LEFT JOIN {}.{} r ON t.{} = r.{}",
+            "SELECT SUM(CASE WHEN r.{} IS NULL THEN 1 ELSE 0 END) as failing_count, COUNT(*) as total_count FROM {} t LEFT JOIN {} r ON t.{} = r.{}",
             quote_ident(ref_column, kind),
             qualified,
-            quote_ident(ref_schema, kind),
-            quote_ident(ref_table, kind),
+            quote_qualified_name(ref_schema, ref_table, kind),
             quote_ident(column, kind),
             quote_ident(ref_column, kind)
-=======
-fn build_rule_sql(schema: &str, table: &str, def: &RuleDefinition) -> String {
-    let qualified = format!("{}.{}", schema, table);
-    match def {
-        RuleDefinition::NotNull { column } => format!(
-            "SELECT SUM(CASE WHEN {} IS NULL THEN 1 ELSE 0 END) as failing_count, COUNT(*) as total_count FROM {}",
-            column, qualified
-        ),
-        RuleDefinition::Unique { column } => format!(
-            "SELECT COUNT(*) - COUNT(DISTINCT {}) as failing_count, COUNT(*) as total_count FROM {}",
-            column, qualified
-        ),
-        RuleDefinition::MinValue { column, min } => format!(
-            "SELECT SUM(CASE WHEN {} < {} THEN 1 ELSE 0 END) as failing_count, COUNT(*) as total_count FROM {}",
-            column, min, qualified
-        ),
-        RuleDefinition::MaxValue { column, max } => format!(
-            "SELECT SUM(CASE WHEN {} > {} THEN 1 ELSE 0 END) as failing_count, COUNT(*) as total_count FROM {}",
-            column, max, qualified
-        ),
-        RuleDefinition::Regex { column, pattern } => format!(
-            "SELECT SUM(CASE WHEN {} NOT LIKE '{}' THEN 1 ELSE 0 END) as failing_count, COUNT(*) as total_count FROM {}",
-            column, pattern, qualified
-        ),
-        RuleDefinition::ReferentialIntegrity { column, ref_schema, ref_table, ref_column, .. } => format!(
-            "SELECT SUM(CASE WHEN r.{} IS NULL THEN 1 ELSE 0 END) as failing_count, COUNT(*) as total_count FROM {} t LEFT JOIN {}.{} r ON t.{} = r.{}",
-            ref_column, qualified, ref_schema, ref_table, column, ref_column
->>>>>>> origin/main
         ),
         RuleDefinition::CustomSql { sql } => sql.clone(),
         RuleDefinition::RowCount { .. } => {
@@ -382,16 +323,12 @@ async fn fetch_ref_values(
     ref_table: &str,
     ref_column: &str,
 ) -> Result<Vec<serde_json::Value>, String> {
-<<<<<<< HEAD
     let ref_kind = db_kind(ref_config);
     let sql = format!(
         "SELECT DISTINCT {} FROM {}",
         quote_ident(ref_column, &ref_kind),
         quote_qualified_name(ref_schema, ref_table, &ref_kind)
     );
-=======
-    let sql = format!("SELECT DISTINCT {} FROM {}.{}", ref_column, ref_schema, ref_table);
->>>>>>> origin/main
     let qr = execute_query(ref_config, &sql, ref_schema, ref_table).await?;
     Ok(qr.rows.into_iter().filter_map(|row| row.into_iter().next()).collect())
 }
@@ -440,10 +377,7 @@ pub async fn delete_rule(
 pub async fn list_rules(
     rules_state: State<'_, RulesState>,
 ) -> Result<Vec<Rule>, String> {
-<<<<<<< HEAD
     rules_state.reload();
-=======
->>>>>>> origin/main
     Ok(rules_state.rules.lock().unwrap().values().cloned().collect())
 }
 
@@ -451,10 +385,7 @@ pub async fn list_rules(
 pub async fn get_last_results(
     results_state: State<'_, ResultsState>,
 ) -> Result<Vec<RuleResult>, String> {
-<<<<<<< HEAD
     results_state.reload();
-=======
->>>>>>> origin/main
     Ok(results_state.results.lock().unwrap().clone())
 }
 
@@ -498,7 +429,6 @@ async fn run_rule_inner(
             .ok_or_else(|| format!("Reference connection not found: {}", ref_id))?;
         let ref_values = fetch_ref_values(&ref_config, ref_schema, ref_table, ref_column).await?;
         let in_list = values_to_in_list(&ref_values);
-<<<<<<< HEAD
         let kind = db_kind(&config);
         let qualified = quote_qualified_name(&rule.schema, &rule.table, &kind);
         let column_ident = quote_ident(column, &kind);
@@ -506,32 +436,17 @@ async fn run_rule_inner(
             format!(
                 "SELECT COUNT(*) as failing_count, COUNT(*) as total_count FROM {} WHERE {} IS NOT NULL",
                 qualified, column_ident
-=======
-        let qualified = format!("{}.{}", rule.schema, rule.table);
-        let sql = if in_list.is_empty() {
-            format!(
-                "SELECT COUNT(*) as failing_count, COUNT(*) as total_count FROM {} WHERE {} IS NOT NULL",
-                qualified, column
->>>>>>> origin/main
             )
         } else {
             format!(
                 "SELECT SUM(CASE WHEN {} IS NOT NULL AND {} NOT IN ({}) THEN 1 ELSE 0 END) as failing_count, COUNT(*) as total_count FROM {}",
-<<<<<<< HEAD
                 column_ident, column_ident, in_list, qualified
-=======
-                column, column, in_list, qualified
->>>>>>> origin/main
             )
         };
         let qr = execute_query(&config, &sql, &rule.schema, &rule.table).await?;
         (sql, qr)
     } else {
-<<<<<<< HEAD
         let sql = build_rule_sql(&rule.schema, &rule.table, &rule.definition, &db_kind(&config));
-=======
-        let sql = build_rule_sql(&rule.schema, &rule.table, &rule.definition);
->>>>>>> origin/main
         let qr = execute_query(&config, &sql, &rule.schema, &rule.table).await?;
         (sql, qr)
     };
@@ -679,10 +594,7 @@ pub async fn run_all_rules(
 pub async fn get_results_history(
     history_state: State<'_, ResultsHistoryState>,
 ) -> Result<Vec<RuleRunRecord>, String> {
-<<<<<<< HEAD
     history_state.reload();
-=======
->>>>>>> origin/main
     Ok(history_state.records.lock().unwrap().clone())
 }
 
@@ -720,7 +632,6 @@ pub async fn get_failing_rows(
                 .ok_or_else(|| format!("Reference connection not found: {}", ref_id))?;
             let ref_values = fetch_ref_values(&ref_config, ref_schema, ref_table, ref_column).await?;
             let in_list = values_to_in_list(&ref_values);
-<<<<<<< HEAD
             let qualified = quote_qualified_name(&rule.schema, &rule.table, &kind);
             let column_ident = quote_ident(column, &kind);
             let inner = if in_list.is_empty() {
@@ -730,13 +641,6 @@ pub async fn get_failing_rows(
                     "SELECT * FROM {} WHERE {} IS NOT NULL AND {} NOT IN ({})",
                     qualified, column_ident, column_ident, in_list
                 )
-=======
-            let qualified = format!("{}.{}", rule.schema, rule.table);
-            let inner = if in_list.is_empty() {
-                format!("SELECT * FROM {} WHERE {} IS NOT NULL", qualified, column)
-            } else {
-                format!("SELECT * FROM {} WHERE {} IS NOT NULL AND {} NOT IN ({})", qualified, column, column, in_list)
->>>>>>> origin/main
             };
             let sql = limit_sql(&inner, 500, &kind);
             return execute_query(&config, &sql, &rule.schema, &rule.table).await;

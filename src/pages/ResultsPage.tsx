@@ -1,8 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-<<<<<<< HEAD
 import { listen } from "@tauri-apps/api/event";
-=======
->>>>>>> origin/main
 import { Play, CheckCircle2, XCircle, Code, PlayCircle, ChevronDown, ChevronRight, Table2, History } from "lucide-react";
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
@@ -338,15 +335,9 @@ function PassRateTrend({ batches, rules }: { batches: Batch[]; rules: Rule[] }) 
 
 // ── Rule sparkline (dots showing recent pass/fail) ─────────────────────────
 
-<<<<<<< HEAD
 function RuleSparkline({ ruleId, batches }: { ruleId: string; batches: Batch[] }) {
   const recentRuns = batches
     .map(b => b.records.find(r => r.rule_id === ruleId))
-=======
-function RuleSparkline({ ruleName, batches }: { ruleName: string; batches: Batch[] }) {
-  const recentRuns = batches
-    .map(b => b.records.find(r => r.rule_name === ruleName))
->>>>>>> origin/main
     .filter(Boolean)
     .slice(-8) as RuleRunRecord[];
 
@@ -367,17 +358,10 @@ function RuleSparkline({ ruleName, batches }: { ruleName: string; batches: Batch
 
 // ── Rule failing-count trend (shown in expanded rule view) ─────────────────
 
-<<<<<<< HEAD
 function RuleFailingTrend({ ruleId, batches }: { ruleId: string; batches: Batch[] }) {
   const data = batches
     .map(b => {
       const rec = b.records.find(r => r.rule_id === ruleId);
-=======
-function RuleFailingTrend({ ruleName, batches }: { ruleName: string; batches: Batch[] }) {
-  const data = batches
-    .map(b => {
-      const rec = b.records.find(r => r.rule_name === ruleName);
->>>>>>> origin/main
       if (!rec) return null;
       return { date: fmtShort(b.ran_at), failing: rec.failing_count };
     })
@@ -569,11 +553,7 @@ function ResultGroup({
                           {r.failing_count.toLocaleString()} failing row{r.failing_count !== 1 ? "s" : ""}
                         </span>
                       )}
-<<<<<<< HEAD
                       <RuleSparkline ruleId={r.rule_id} batches={batches} />
-=======
-                      <RuleSparkline ruleName={r.rule_name} batches={batches} />
->>>>>>> origin/main
                     </div>
                     <p className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>{r.details}</p>
                     {!r.passed && r.total_count > 0 && (
@@ -618,11 +598,7 @@ function ResultGroup({
                 </div>
                 {isExpanded && (
                   <div className="px-4 pb-3" style={{ background: r.passed ? "var(--bg-secondary)" : "rgba(239,68,68,0.03)" }}>
-<<<<<<< HEAD
                     <RuleFailingTrend ruleId={r.rule_id} batches={batches} />
-=======
-                    <RuleFailingTrend ruleName={r.rule_name} batches={batches} />
->>>>>>> origin/main
                   </div>
                 )}
               </div>
@@ -659,15 +635,11 @@ export function ResultsPage() {
     setHistory(hist);
   }
 
-<<<<<<< HEAD
   useEffect(() => {
     load();
     const unlisten = listen("results://changed", () => load());
     return () => { unlisten.then(f => f()); };
   }, []);
-=======
-  useEffect(() => { load(); }, []);
->>>>>>> origin/main
 
   const batches = useMemo(() => groupIntoBatches(history), [history]);
   const isFiltered = !!(dateFrom || dateTo);
@@ -707,15 +679,12 @@ export function ResultsPage() {
     }));
   }, [isFiltered, results, history, dateFrom, dateTo]);
 
-<<<<<<< HEAD
   const ruleIds = useMemo(() => new Set(rules.map(r => r.id)), [rules]);
   const visibleResults = useMemo(
     () => activeResults.filter(r => ruleIds.has(r.rule_id)),
     [activeResults, ruleIds],
   );
 
-=======
->>>>>>> origin/main
   function applyPreset(days: number | null) {
     if (days === null) { setDateFrom(""); setDateTo(""); return; }
     const to = new Date();
@@ -767,11 +736,7 @@ export function ResultsPage() {
   const resultsByGroup = new Map<string, RuleResult[]>();
   const ungroupedResults: RuleResult[] = [];
 
-<<<<<<< HEAD
   for (const result of visibleResults) {
-=======
-  for (const result of activeResults) {
->>>>>>> origin/main
     const group = ruleGroupMap.get(result.rule_id) ?? null;
     if (group) {
       const list = resultsByGroup.get(group) ?? [];
@@ -784,13 +749,8 @@ export function ResultsPage() {
   const sortedGroups = [...resultsByGroup.entries()].sort(([a], [b]) => a.localeCompare(b));
   const hasGroups = sortedGroups.length > 0;
 
-<<<<<<< HEAD
   const passed = visibleResults.filter(r => r.passed).length;
   const failed = visibleResults.filter(r => !r.passed).length;
-=======
-  const passed = activeResults.filter(r => r.passed).length;
-  const failed = activeResults.filter(r => !r.passed).length;
->>>>>>> origin/main
 
   const groupBarData = sortedGroups.map(([name, res]) => ({
     name: name.length > 16 ? name.slice(0, 16) + "…" : name,
@@ -813,11 +773,7 @@ export function ResultsPage() {
     return dateFrom === expectedFrom && dateTo === toDateStr(new Date());
   }
 
-<<<<<<< HEAD
   const hasAnyResults = results.length > 0 || (isFiltered && visibleResults.length > 0);
-=======
-  const hasAnyResults = results.length > 0 || (isFiltered && activeResults.length > 0);
->>>>>>> origin/main
 
   return (
     <div className="p-6 max-w-4xl">
@@ -878,11 +834,7 @@ export function ResultsPage() {
           </div>
           {isFiltered && (
             <span className="text-xs ml-1" style={{ color: "var(--text-secondary)" }}>
-<<<<<<< HEAD
               {visibleResults.length} rule{visibleResults.length !== 1 ? "s" : ""} in period
-=======
-              {activeResults.length} rule{activeResults.length !== 1 ? "s" : ""} in period
->>>>>>> origin/main
             </span>
           )}
         </div>
@@ -896,11 +848,7 @@ export function ResultsPage() {
         </div>
       )}
 
-<<<<<<< HEAD
       {(visibleResults.length > 0 || running) && (
-=======
-      {(activeResults.length > 0 || running) && (
->>>>>>> origin/main
         <>
           {isFiltered && (
             <p className="text-xs mb-3" style={{ color: "var(--text-secondary)" }}>
@@ -911,11 +859,7 @@ export function ResultsPage() {
           {/* Stat cards */}
           <div className="grid grid-cols-3 gap-4 mb-4">
             <div className="rounded-lg p-4" style={{ background: "var(--bg-secondary)", border: "1px solid var(--border)" }}>
-<<<<<<< HEAD
               <p className="text-2xl font-bold">{visibleResults.length}</p>
-=======
-              <p className="text-2xl font-bold">{activeResults.length}</p>
->>>>>>> origin/main
               <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>Total Rules</p>
             </div>
             <div className="rounded-lg p-4" style={{ background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)" }}>
@@ -942,11 +886,7 @@ export function ResultsPage() {
           )}
 
           {/* Failure rate chart */}
-<<<<<<< HEAD
           {visibleResults.some(r => !r.passed && r.total_count > 0) && (
-=======
-          {activeResults.some(r => !r.passed && r.total_count > 0) && (
->>>>>>> origin/main
             <div className="mb-6">
               <FailureRateBar results={activeResults} />
             </div>
@@ -1010,11 +950,7 @@ export function ResultsPage() {
                                 {r.failing_count.toLocaleString()} failing row{r.failing_count !== 1 ? "s" : ""}
                               </span>
                             )}
-<<<<<<< HEAD
                             <RuleSparkline ruleId={r.rule_id} batches={filteredBatches} />
-=======
-                            <RuleSparkline ruleName={r.rule_name} batches={filteredBatches} />
->>>>>>> origin/main
                           </div>
                           <p className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>{r.details}</p>
                           {!r.passed && r.total_count > 0 && (

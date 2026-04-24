@@ -9,8 +9,9 @@
    - 4.1 [Tauri App Setup (lib.rs)](#41-tauri-app-setup-librs)
    - 4.2 [Application State](#42-application-state)
    - 4.3 [Persistence Layer](#43-persistence-layer)
-   - 4.4 [Command Handlers](#44-command-handlers)
-   - 4.5 [Database Driver Layer](#45-database-driver-layer)
+   - 4.4 [Live File Sync](#44-live-file-sync)
+   - 4.5 [Command Handlers](#45-command-handlers)
+   - 4.6 [Database Driver Layer](#46-database-driver-layer)
 5. [Data Models](#5-data-models)
 6. [Key Data Flows](#6-key-data-flows)
    - 6.1 [Add / Test a Connection](#61-add--test-a-connection)
@@ -20,24 +21,26 @@
 7. [Rule Types & SQL Generation](#7-rule-types--sql-generation)
 8. [Supported Databases](#8-supported-databases)
 9. [Persistence & File Layout](#9-persistence--file-layout)
-10. [Configuration Files](#10-configuration-files)
+10. [Configuration](#10-configuration)
 11. [Security Considerations](#11-security-considerations)
 
 ---
 
 ## 1. Overview
 
-**DQ Studio** is a desktop application for **data quality validation and table profiling** across multiple database platforms. It is built as a local-first desktop app using Tauri + Rust — there is no remote server. All data (connections, rules, results, schedules) is stored in JSON files on the user's machine.
+**DQ Studio** is a desktop application for **data quality validation and table profiling** across multiple database platforms. It is built as a local-first desktop app using Tauri 2 + Rust — there is no remote server. All data (connections, rules, results, schedules) is stored in JSON files in a configurable directory.
 
 **Core capabilities:**
 
 | Capability | Description |
 |---|---|
 | Connection management | Add, test, and remove connections to SQL Server, Oracle, Snowflake, DB2, CSV, or Excel |
-| Data quality rules | Define and run 8 types of rules (null check, uniqueness, range, regex, custom SQL, etc.) |
-| Results & history | View pass/fail per rule run; drill into failing rows |
+| Data quality rules | Define and run 8 types of rules (null check, uniqueness, range, regex, custom SQL, etc.) organized into groups |
+| Results & history | View pass/fail per rule run, failure rates, trends, and drill into failing rows |
 | Table profiling | Analyze columns for row counts, null %, distinct values, min/max |
-| Scheduling | Run rule sets on a recurring schedule (daily, weekly, etc.) |
+| Scheduling | Run rule sets on a recurring schedule (hourly, daily, weekly) |
+| Live sync | Changes to JSON files on disk (including by other users via shared/network locations) are detected and reflected automatically |
+| Settings | Configurable data directory, dark/light theme |
 
 ---
 
@@ -55,9 +58,11 @@
 | CSV parsing | csv | — |
 | Excel parsing | calamine | — |
 | In-memory SQL (files) | rusqlite | — |
+| File system watching | notify | 6 |
 | Serialization | serde / serde_json | 1 |
 | Date/time | chrono | 0.4 |
 | ID generation | uuid (v4) | — |
+| Native file dialogs | rfd | — |
 
 ---
 
@@ -69,18 +74,19 @@ src-tauri/
 ├── tauri.conf.json         # Tauri app configuration
 └── src/
     ├── main.rs             # Binary entry point (delegates to lib.rs)
-    ├── lib.rs              # Tauri app builder + command registration
-    ├── state.rs            # Shared mutable state definitions
-    ├── persistence.rs      # JSON load/save helpers
+    ├── lib.rs              # Tauri app builder, command registration, file watcher
+    ├── state.rs            # AppState (connections)
+    ├── persistence.rs      # Generic JSON load/save helpers
     ├── commands/
+    │   ├── config.rs       # App settings: data directory, theme, file picker
     │   ├── connections.rs  # Add/remove/test connections
-    │   ├── schema.rs       # List databases, tables, columns
-    │   ├── rules.rs        # Save/delete/run rules, trace failures
+    │   ├── schema.rs       # List tables and columns
+    │   ├── rules.rs        # Save/delete/run rules, results, history
     │   ├── profiling.rs    # Profile tables, history
     │   └── scheduler.rs    # Create/run/delete schedules
     └── db/
-        ├── mod.rs          # Shared types + error definitions
-        ├── sqlserver.rs    # SQL Server driver
+        ├── mod.rs          # Shared types (ConnectionConfig, QueryResult, etc.)
+        ├── sqlserver.rs    # SQL Server driver (tiberius)
         ├── oracle.rs       # Oracle driver
         ├── snowflake.rs    # Snowflake REST API driver
         ├── db2.rs          # DB2 ODBC driver
@@ -93,83 +99,147 @@ src-tauri/
 
 ### 4.1 Tauri App Setup (`lib.rs`)
 
-`lib.rs` is the Rust library crate entry point. It:
+`lib.rs` is the Rust library crate entry point. The setup function:
 
-1. Initializes all state structs (wrapped in `Mutex` inside Tauri's managed state).
-2. Loads persisted data from JSON files on startup via `persistence::load_*` helpers.
-3. Registers every command handler with `.invoke_handler(tauri::generate_handler![...])`.
-4. Builds and runs the Tauri app.
+1. Resolves the default data directory via Tauri's `app.path().app_data_dir()`.
+2. Creates a `ConfigState` (from `commands/config.rs`) which loads `app_config.json` from the default directory. This config may point to a custom data directory.
+3. Calls `config_state.effective_data_dir()` to get the active data path (custom if set and valid, otherwise default).
+4. Initialises all other state structs with the effective data path.
+5. Spawns a background thread running a `notify` file watcher on the data directory (see §4.4).
+6. Registers all command handlers.
 
 ### 4.2 Application State
 
-State is held in `src-tauri/src/state.rs`. Each domain area has its own state struct, all wrapped in `Mutex<T>` and registered with Tauri's state manager:
+Each domain area has its own state struct, held in a `Mutex` and registered with Tauri's state manager. All state structs store `data_path` and implement `reload()` and `save()`:
 
 ```rust
+// state.rs
 pub struct AppState {
     pub connections: Mutex<HashMap<String, ConnectionInfo>>,
+    pub data_path: PathBuf,
 }
 
+// commands/rules.rs
 pub struct RulesState {
     pub rules: Mutex<HashMap<String, Rule>>,
+    pub data_path: PathBuf,
 }
 
 pub struct ResultsState {
-    pub results: Mutex<Vec<RuleResult>>,    // latest batch
+    pub results: Mutex<Vec<RuleResult>>,
+    pub data_path: PathBuf,
 }
 
 pub struct ResultsHistoryState {
-    pub history: Mutex<Vec<RuleRunRecord>>, // all batches
+    pub records: Mutex<Vec<RuleRunRecord>>,
+    pub data_path: PathBuf,
 }
 
+// commands/profiling.rs
 pub struct ProfilingState {
     pub runs: Mutex<Vec<ProfilingRun>>,
+    pub data_path: PathBuf,
 }
 
+// commands/scheduler.rs
 pub struct SchedulerState {
     pub schedules: Mutex<Vec<Schedule>>,
+    pub data_path: PathBuf,
+}
+
+// commands/config.rs
+pub struct ConfigState {
+    pub config: Mutex<AppConfig>,
+    pub config_path: PathBuf,
+    pub default_data_dir: PathBuf,
 }
 ```
 
-Command handlers receive state via Tauri's dependency injection: `State<'_, AppState>`.
+Every state struct has two key methods:
+- `reload(&self)` — re-reads the JSON file from disk and replaces the in-memory cache. Called at the start of every `list_*` command so external edits are always reflected.
+- `save(&self)` — serialises the current in-memory state and writes the JSON file to disk. Called after every mutating command.
+
+Command handlers receive state via Tauri's dependency injection: `State<'_, RulesState>`.
 
 ### 4.3 Persistence Layer
 
-`src-tauri/src/persistence.rs` provides generic load/save helpers:
+`src-tauri/src/persistence.rs` provides generic helpers:
 
 ```rust
-pub fn load_json<T: DeserializeOwned>(path: &Path) -> T
-pub fn save_json<T: Serialize>(path: &Path, data: &T)
+pub fn load<T: DeserializeOwned>(path: &PathBuf) -> Option<T>
+pub fn save<T: Serialize>(path: &PathBuf, data: &T) -> Result<(), String>
 ```
 
-JSON files are stored in the platform app data directory:
-- **Windows:** `%APPDATA%\dq-studio\`
-- **macOS:** `~/Library/Application Support/dq-studio/`
-- **Linux:** `~/.config/dq-studio/`
+`load` returns `None` if the file does not exist or fails to parse — callers fall back to `unwrap_or_default()`. `save` creates parent directories if missing before writing.
 
-Files written: `connections.json`, `rules.json`, `results.json`, `results_history.json`, `profiling_runs.json`, `schedules.json`.
+### 4.4 Live File Sync
 
-Every mutating command locks the relevant state `Mutex`, applies the change in memory, then immediately writes the updated state to disk.
+A background thread spawned in `lib.rs` watches the data directory for file changes using the `notify` crate:
 
-### 4.4 Command Handlers
+```
+File change on disk
+      │
+      ▼
+notify::RecommendedWatcher (background thread)
+      │  debounce: 300ms per event name
+      ▼
+match filename:
+  "connections.json"                → emit "connections://changed"
+  "rules.json"                      → emit "rules://changed"
+  "results.json" / "results_history.json" → emit "results://changed"
+  "schedules.json"                  → emit "schedules://changed"
+  "profiling_runs.json"             → emit "profiling://changed"
+      │
+      ▼
+Tauri event sent to frontend webview
+      │
+      ▼
+Page listener (listen("rules://changed", ...)) calls load()
+      │
+      ▼
+list_rules() → rules_state.reload() → reads rules.json from disk
+      │
+      ▼
+UI updates with fresh data
+```
 
-Commands are Tauri IPC endpoints — callable from the UI layer via `invoke()`. They are organized into five modules under `src-tauri/src/commands/`.
+This enables real-time collaboration: when the data directory is a shared location (OneDrive, network share), changes committed by any user are picked up automatically by all running instances without restarting.
+
+The 300ms debounce prevents duplicate reloads from cloud sync clients that write files in multiple steps.
+
+### 4.5 Command Handlers
+
+Commands are Tauri IPC endpoints callable from the UI via `invoke()`. They are organised into six modules.
+
+#### `commands/config.rs`
+
+| Command | Description |
+|---|---|
+| `get_settings` | Returns `{ data_dir, default_data_dir, is_custom }` |
+| `set_data_dir(path)` | Saves a custom data directory path to `app_config.json`; takes effect on next restart |
+| `pick_directory()` | Opens a native OS folder picker dialog (via `rfd`); returns selected path or null |
+
+`AppConfig` is stored in the **default** app data directory (not the custom one), so its location is always known regardless of what the user configures.
+
+`effective_data_dir()` returns the custom path if it is set and the directory exists, otherwise the default.
 
 #### `commands/connections.rs`
 
-| Command | Signature | Description |
-|---|---|---|
-| `test_connection` | `(config: ConnectionConfig) → Result<()>` | Opens and closes a connection to validate credentials |
-| `add_connection` | `(name: String, config: ConnectionConfig) → Result<String>` | Generates UUID, inserts into state, persists |
-| `remove_connection` | `(id: String) → Result<()>` | Removes from state, persists |
-| `list_connections` | `() → Result<Vec<ConnectionInfo>>` | Returns all stored connections |
+| Command | Description |
+|---|---|
+| `test_connection(config)` | Opens and closes a connection to validate credentials |
+| `add_connection(name, config)` | Generates UUID, inserts into state, persists |
+| `update_connection(id, name, config)` | Replaces connection in state, persists |
+| `remove_connection(id)` | Removes from state, persists |
+| `list_connections()` | Calls `reload()`, returns all connections |
+| `pick_file(title, extensions)` | Opens a native file picker; returns selected path |
 
 #### `commands/schema.rs`
 
 | Command | Description |
 |---|---|
-| `list_databases` | Calls driver-specific function to list databases or schemas |
-| `get_tables` | Lists tables in a given schema for a connection |
-| `get_columns` | Lists column names and data types for a table |
+| `get_tables(connection_id)` | Lists tables/sheets for a connection |
+| `get_columns(connection_id, schema, table)` | Lists column names and data types |
 
 Each command looks up the connection by ID from `AppState`, then delegates to the matching driver module.
 
@@ -177,12 +247,16 @@ Each command looks up the connection by ID from `AppState`, then delegates to th
 
 | Command | Description |
 |---|---|
-| `save_rule` | Upserts a rule (creates UUID if new, updates if ID present) |
-| `delete_rule` | Removes rule by ID |
-| `list_rules` | Returns all rules |
-| `run_rule` | Executes a single rule; stores result |
-| `run_all_rules` | Runs all rules as a single batch; creates a `RuleRunRecord` |
-| `trace_failing_rows` | Re-runs the failing condition SQL and returns actual rows |
+| `save_rule(rule)` | Upserts a rule (creates UUID if new) |
+| `delete_rule(id)` | Removes rule by ID |
+| `list_rules()` | Calls `reload()`, returns all rules |
+| `run_rule(rule_id, batch_id?)` | Executes a single rule; stores result in `ResultsState` and `ResultsHistoryState` |
+| `run_all_rules()` | Runs all enabled rules as a batch |
+| `get_failing_rows(rule_id)` | Re-runs the failing-rows SQL, returns up to 500 rows |
+| `get_last_results()` | Calls `reload()`, returns latest result per rule |
+| `get_results_history()` | Calls `reload()`, returns all historical run records |
+| `clear_results_history()` | Clears history state and persists |
+| `run_query_preview(connection_id, sql)` | Executes arbitrary SQL and returns results (used in rule builder) |
 
 `run_rule` internal flow:
 1. Load `Rule` from `RulesState`.
@@ -190,83 +264,72 @@ Each command looks up the connection by ID from `AppState`, then delegates to th
 3. Detect database dialect from `ConnectionConfig` variant.
 4. Call `build_rule_sql(rule.definition, dialect)` to generate dialect-specific SQL.
 5. Execute via the matching driver.
-6. Parse `failing_count` and `total_count` from the result.
-7. Store `RuleResult` in `ResultsState` and append to `ResultsHistoryState`.
+6. Parse `failing_count` and `total_count` from the result set.
+7. Store `RuleResult` in `ResultsState` and append `RuleRunRecord` to `ResultsHistoryState`.
 
 #### `commands/profiling.rs`
 
 | Command | Description |
 |---|---|
-| `profile_table` | Runs per-column analytics queries against a table |
-| `list_profiling_runs` | Returns all stored `ProfilingRun` records |
+| `profile_table(connection_id, schema, table)` | Runs column analytics; persists `ProfilingRun` |
+| `sample_table(connection_id, schema, table, limit)` | Returns up to `limit` rows as a preview |
+| `list_profiling_runs()` | Calls `reload()`, returns all runs (newest first) |
+| `save_profiling_run(run)` | Persists a run record |
+| `delete_profiling_run(id)` | Removes a run by ID |
+| `clear_profiling_runs()` | Clears all profiling history |
 
-For each column in the target table, the profiling command executes:
-- `COUNT(*)` for total rows
-- `COUNT(*) - COUNT(col)` for null count
-- `COUNT(DISTINCT col)` for distinct count
-- `MIN(col)` and `MAX(col)` for range
-
-Results are aggregated into a `ProfilingRun` struct and persisted.
+Profiling runs a single combined SQL query per table that computes `COUNT(*)`, per-column null counts, distinct counts, and min/max in one pass. SQL Server special cases handle unsupported types (`text`, `ntext`, `image`, `xml`, etc.).
 
 #### `commands/scheduler.rs`
 
 | Command | Description |
 |---|---|
-| `save_schedule` | Upserts a schedule; computes `next_run_at` |
-| `delete_schedule` | Removes a schedule by ID |
-| `list_schedules` | Returns all schedules |
-| `get_due_schedules` | Returns schedules whose `next_run_at` ≤ now |
-| `mark_schedule_ran` | Updates `last_ran_at` and recomputes `next_run_at` |
+| `save_schedule(schedule)` | Upserts a schedule; recomputes `next_run_at` |
+| `delete_schedule(id)` | Removes a schedule by ID |
+| `list_schedules()` | Calls `reload()`, returns all schedules |
+| `get_due_schedules()` | Returns schedules with `enabled == true` and `next_run_at <= now` |
+| `mark_schedule_ran(id)` | Updates `last_ran_at`, recomputes `next_run_at`, persists |
 
-`compute_next_run(recurrence, from: DateTime)` calculates the next execution time:
-- `Once` — fixed datetime (no recurrence)
-- `Daily` — `from + 1 day`
-- `Weekly` — `from + 7 days`
-- `Monthly` — `from + 1 month` (using chrono's month arithmetic)
+`compute_next_run(recurrence, now)` calculates the next execution time:
+- `Once` — fixed datetime stored at creation time
+- `Hourly` — next full hour after `now`
+- `Daily` — specified HH:MM on today if still future, otherwise tomorrow
+- `Weekly` — specified weekday + HH:MM; advances 7 days if the candidate is in the past
 
-### 4.5 Database Driver Layer
+### 4.6 Database Driver Layer
 
-All drivers live in `src-tauri/src/db/` and implement the same conceptual interface:
-
-```rust
-async fn connect(config: &ConnectionConfig) -> Result<DriverHandle>
-async fn get_tables(conn: &DriverHandle, schema: &str) -> Result<Vec<String>>
-async fn get_columns(conn: &DriverHandle, schema: &str, table: &str) -> Result<Vec<ColumnInfo>>
-async fn run_query(conn: &DriverHandle, sql: &str) -> Result<QueryResult>
-```
+All drivers live in `src-tauri/src/db/` and are invoked by command handlers.
 
 #### SQL Server (`sqlserver.rs`)
-
 - Uses the `tiberius` async crate over TCP.
-- Connection string built from host, port, username, password, database.
-- `trust_cert` flag controls TLS certificate validation (useful for local dev environments).
-- Dialect: uses `SELECT TOP N` for row limiting.
+- `trust_cert` flag controls TLS certificate validation (useful for local/dev environments).
+- Identifier quoting: `[schema].[table]`
+- Row limiting: `SELECT TOP N`
 
 #### Oracle (`oracle.rs`)
-
-- Uses the `oracle` crate (synchronous; wrapped in `tokio::task::spawn_blocking`).
+- Uses the synchronous `oracle` crate; all calls wrapped in `tokio::task::spawn_blocking`.
 - Connects via Easy Connect string: `//host:port/service_name`.
-- Dialect: uses `ROWNUM <= N` for row limiting.
+- Identifier quoting: `"schema"."table"`
+- Row limiting: `WHERE ROWNUM <= N`
 
 #### Snowflake (`snowflake.rs`)
-
-- No native Rust driver available; uses the Snowflake SQL REST API via `reqwest`.
-- Authentication: username/password posted to the `/api/v2/statements` endpoint.
-- Warehouse and schema are set as session parameters in each request.
-- Dialect: uses `LIMIT N` for row limiting.
+- No native Rust driver; uses Snowflake SQL REST API via `reqwest`.
+- Authentication: username/password posted to `/api/v2/statements`.
+- Warehouse and schema set as session parameters per request.
+- Identifier quoting: `"schema"."table"`
+- Row limiting: `LIMIT N`
 
 #### DB2 (`db2.rs`)
-
-- Uses `odbc-api` which requires an ODBC driver manager and a configured DSN on the host OS.
-- Connection via DSN string with username/password.
-- Dialect: uses `FETCH FIRST N ROWS ONLY` for row limiting.
+- Uses `odbc-api`; requires an ODBC driver manager and configured DSN on the host OS.
+- All calls wrapped in `tokio::task::spawn_blocking`.
+- Identifier quoting: `"schema"."table"`
+- Row limiting: `FETCH FIRST N ROWS ONLY`
 
 #### Files — CSV / Excel (`files.rs`)
-
-- CSV files: parsed with the `csv` crate into rows.
-- Excel files: parsed with `calamine`; user specifies which sheet to read.
+- CSV: parsed with the `csv` crate into rows.
+- Excel: parsed with `calamine`; the target sheet is selected by name.
 - Data is loaded into an **in-memory SQLite database** (via `rusqlite`).
-- Subsequent queries are executed against this in-memory SQLite instance.
+- Rule SQL is adapted for SQLite: quoted `"schema"."table"` references are rewritten to just `"table"` since SQLite has no schema concept.
 - This approach allows all rule types (including `CustomSql`) to work against flat files using standard SQL.
 
 ---
@@ -277,8 +340,8 @@ async fn run_query(conn: &DriverHandle, sql: &str) -> Result<QueryResult>
 
 ```rust
 pub struct ConnectionInfo {
-    pub id: String,          // UUID v4
-    pub name: String,        // User-defined label
+    pub id: String,           // UUID v4
+    pub name: String,         // User-defined label
     pub config: ConnectionConfig,
 }
 ```
@@ -290,9 +353,9 @@ pub enum ConnectionConfig {
     SqlServer { host, port, username, password, database, trust_cert },
     Oracle    { host, port, username, password, service_name },
     Snowflake { account, username, password, warehouse, database, schema },
-    Db2       { dsn, username, password },
+    Db2       { host, port, database, username, password },
     Csv       { path },
-    Excel     { path, sheet },
+    Excel     { path },
 }
 ```
 
@@ -302,11 +365,13 @@ pub enum ConnectionConfig {
 pub struct Rule {
     pub id: String,
     pub name: String,
+    pub description: Option<String>,
     pub connection_id: String,
     pub schema: String,
     pub table: String,
     pub group: Option<String>,
     pub definition: RuleDefinition,
+    pub enabled: bool,
 }
 ```
 
@@ -316,12 +381,12 @@ pub struct Rule {
 |---|---|---|
 | `NotNull` | `column` | No NULL values in the column |
 | `Unique` | `column` | No duplicate values in the column |
-| `MinValue` | `column`, `min` | All values ≥ min |
-| `MaxValue` | `column`, `max` | All values ≤ max |
-| `Regex` | `column`, `pattern` | All values match the regex pattern |
-| `CustomSql` | `sql` | Custom SQL returns 0 rows (0 = pass) |
-| `RowCount` | `min_rows`, `max_rows?` | Table row count is within range |
-| `ReferentialIntegrity` | `column`, `ref_connection_id`, `ref_table`, `ref_column` | All values exist in reference table |
+| `MinValue` | `column`, `min: f64` | All values ≥ min |
+| `MaxValue` | `column`, `max: f64` | All values ≤ max |
+| `Regex` | `column`, `pattern` | All values match the pattern (SQL LIKE syntax) |
+| `CustomSql` | `sql` | Custom SQL must return `failing_count` and `total_count` columns |
+| `RowCount` | `min?: u64`, `max?: u64` | Table row count is within the specified range |
+| `ReferentialIntegrity` | `column`, `ref_connection_id?`, `ref_schema`, `ref_table`, `ref_column` | All values exist in the reference column |
 
 ### RuleResult
 
@@ -332,8 +397,24 @@ pub struct RuleResult {
     pub passed: bool,
     pub failing_count: i64,
     pub total_count: i64,
-    pub ran_at: DateTime<Utc>,
+    pub details: String,
+    pub query_used: String,
+}
+```
+
+### RuleRunRecord
+
+```rust
+pub struct RuleRunRecord {
+    pub id: String,
     pub batch_id: String,
+    pub ran_at: String,       // RFC 3339
+    pub rule_id: String,
+    pub rule_name: String,
+    pub passed: bool,
+    pub failing_count: i64,
+    pub total_count: i64,
+    pub details: String,
 }
 ```
 
@@ -343,10 +424,11 @@ pub struct RuleResult {
 pub struct ProfilingRun {
     pub id: String,
     pub connection_id: String,
+    pub connection_name: String,
     pub schema: String,
     pub table: String,
-    pub ran_at: DateTime<Utc>,
-    pub columns: Vec<ColumnProfile>,
+    pub ran_at: String,
+    pub profiles: Vec<ColumnProfile>,
 }
 
 pub struct ColumnProfile {
@@ -366,13 +448,23 @@ pub struct ColumnProfile {
 pub struct Schedule {
     pub id: String,
     pub name: String,
-    pub target: ScheduleTarget,   // AllRules | Group(String) | Rules(Vec<String>)
-    pub recurrence: Recurrence,   // Once | Daily | Weekly | Monthly
+    pub target: ScheduleTarget,  // All | Group(String) | Rules(Vec<String>)
+    pub recurrence: Recurrence,  // Once | Hourly | Daily | Weekly
     pub enabled: bool,
-    pub last_ran_at: Option<DateTime<Utc>>,
-    pub next_run_at: Option<DateTime<Utc>>,
+    pub last_ran_at: Option<String>,
+    pub next_run_at: String,
 }
 ```
+
+### AppConfig
+
+```rust
+pub struct AppConfig {
+    pub data_dir: Option<String>,  // None = use default
+}
+```
+
+Stored at the **default** app data path as `app_config.json`, independent of the configured data directory.
 
 ---
 
@@ -385,15 +477,14 @@ invoke("test_connection", { config })
       │
       ▼
 commands::connections::test_connection(config)
-      │
       ├─ SqlServer → tiberius::Client::connect(...)
       ├─ Oracle    → oracle::Connection::connect(...)
       ├─ Snowflake → reqwest POST /api/v2/statements
       ├─ Db2       → odbc_api::Environment::connect(...)
-      └─ Csv/Excel → parse file + load into SQLite
+      └─ Csv/Excel → file exists + parseable check
       │
       ▼
-Ok(()) or Err(message)
+Ok("Connected successfully") or Err(message)
 
       │ (on success)
       ▼
@@ -404,8 +495,8 @@ invoke("add_connection", { name, config })
 commands::connections::add_connection
       ├─ Generate UUID
       ├─ Lock AppState.connections Mutex
-      ├─ Insert ConnectionInfo into HashMap
-      └─ persistence::save_json("connections.json", ...)
+      ├─ Insert ConnectionInfo
+      └─ state.save() → writes connections.json
       │
       ▼
 Returns connection ID (String)
@@ -417,27 +508,28 @@ Returns connection ID (String)
 invoke("run_rule", { rule_id })
       │
       ▼
-commands::rules::run_rule(rule_id, rules_state, app_state)
+commands::rules::run_rule(rule_id, rules_state, app_state, ...)
       │
-      ├─ Lock RulesState → load Rule by rule_id
-      ├─ Lock AppState   → load ConnectionInfo by rule.connection_id
-      ├─ Detect dialect from ConnectionConfig variant
+      ├─ rules_state.reload() → re-reads rules.json
+      ├─ Load Rule by rule_id
+      ├─ Load ConnectionInfo by rule.connection_id
+      ├─ Detect DbKind from ConnectionConfig variant
       │
-      ├─ build_rule_sql(rule.definition, dialect)
-      │     ├─ NotNull             → SELECT COUNT(*) ... WHERE col IS NULL
-      │     ├─ Unique              → SELECT COUNT(*) ... WHERE col IN (GROUP BY HAVING COUNT > 1)
-      │     ├─ MinValue            → SELECT COUNT(*) ... WHERE col < min
-      │     ├─ MaxValue            → SELECT COUNT(*) ... WHERE col > max
-      │     ├─ Regex               → dialect-specific REGEXP / REGEXP_LIKE
-      │     ├─ CustomSql           → as-is (user-supplied SQL)
-      │     ├─ RowCount            → SELECT COUNT(*) FROM table
-      │     └─ ReferentialIntegrity → SELECT COUNT(*) ... WHERE col NOT IN (ref table)
+      ├─ build_rule_sql(rule.definition, db_kind)
+      │     ├─ NotNull              → SELECT COUNT(*) ... WHERE col IS NULL
+      │     ├─ Unique               → ... WHERE col IN (GROUP BY HAVING COUNT > 1)
+      │     ├─ MinValue             → ... WHERE col < min
+      │     ├─ MaxValue             → ... WHERE col > max
+      │     ├─ Regex                → dialect-specific LIKE / REGEXP_LIKE
+      │     ├─ CustomSql            → as-is
+      │     ├─ RowCount             → SELECT COUNT(*) FROM table
+      │     └─ ReferentialIntegrity → ... WHERE col NOT IN (ref table)
       │
       ├─ Execute SQL via matching driver
-      ├─ Parse failing_count, total_count from result set
+      ├─ Parse failing_count, total_count from QueryResult
       ├─ Build RuleResult { passed: failing_count == 0, ... }
-      ├─ Lock ResultsState → update latest results
-      └─ Lock ResultsHistoryState → append to batch history
+      ├─ Lock ResultsState → upsert latest result
+      └─ Lock ResultsHistoryState → append RuleRunRecord
       │
       ▼
 Returns RuleResult
@@ -449,21 +541,19 @@ Returns RuleResult
 invoke("profile_table", { connection_id, schema, table })
       │
       ▼
-commands::profiling::profile_table(connection_id, schema, table, ...)
+commands::profiling::profile_table(...)
       │
-      ├─ Lock AppState → load ConnectionInfo
-      ├─ get_columns(conn, schema, table) → Vec<ColumnInfo>
+      ├─ Load ConnectionInfo from AppState
+      ├─ get_columns_for(config, schema, table) → Vec<ColumnInfo>
       │
-      └─ For each column:
-            ├─ SELECT COUNT(*) AS total        FROM schema.table
-            ├─ SELECT COUNT(*) - COUNT(col)    FROM schema.table  (null count)
-            ├─ SELECT COUNT(DISTINCT col)      FROM schema.table
-            └─ SELECT MIN(col), MAX(col)       FROM schema.table
+      ├─ build_profile_sql(schema, table, columns, dialect)
+      │     Single query: COUNT(*) + per-column null/distinct/min/max
       │
-      ├─ Aggregate into Vec<ColumnProfile>
-      ├─ Build ProfilingRun { id, connection_id, schema, table, ran_at, columns }
+      ├─ Execute via matching driver → QueryResult
+      ├─ Parse result columns into Vec<ColumnProfile>
+      ├─ Build ProfilingRun { id, connection_id, schema, table, ran_at, profiles }
       ├─ Lock ProfilingState → append run
-      └─ persistence::save_json("profiling_runs.json", ...)
+      └─ profiling_state.save() → writes profiling_runs.json
       │
       ▼
 Returns ProfilingRun
@@ -471,109 +561,104 @@ Returns ProfilingRun
 
 ### 6.4 Scheduler Execution
 
-The scheduler has no persistent background thread. The caller is responsible for polling and triggering execution:
+The scheduler has no persistent background thread in Rust. The frontend polls and triggers execution:
 
 ```
+Frontend interval (every 60s):
+      │
+      ▼
 invoke("get_due_schedules")
       │
       ▼
-commands::scheduler::get_due_schedules(scheduler_state)
-      │
-      └─ Filter: schedule.enabled == true
-                 && schedule.next_run_at <= Utc::now()
+commands::scheduler::get_due_schedules
+      └─ Filter: enabled == true && next_run_at <= now
       │
       ▼
 Returns Vec<Schedule>
 
       │ For each due schedule:
       ▼
-
-invoke("run_all_rules", { rule_ids })
+invoke("run_rule" | "run_all_rules", ...)  ← depends on schedule.target
       │
       ▼
-commands::rules::run_all_rules(...)
-      ├─ Iterates over target rule IDs
-      ├─ Calls run_rule logic for each
-      └─ Groups results into a single RuleRunRecord batch
-
+invoke("mark_schedule_ran", { id })
       │
       ▼
-
-invoke("mark_schedule_ran", { schedule_id })
-      │
-      ▼
-commands::scheduler::mark_schedule_ran(id, scheduler_state)
-      ├─ Set last_ran_at = Utc::now()
-      ├─ Recompute next_run_at via compute_next_run(recurrence, now)
-      └─ persistence::save_json("schedules.json", ...)
+commands::scheduler::mark_schedule_ran
+      ├─ last_ran_at = now
+      ├─ next_run_at = compute_next_run(recurrence, now)
+      └─ scheduler_state.save()
 ```
 
 ---
 
 ## 7. Rule Types & SQL Generation
 
-Rules generate different SQL depending on both the rule type and the target database dialect. Below are representative examples using SQL Server syntax.
+Rules generate different SQL depending on both the rule type and the target database dialect. Identifiers are always quoted using `quote_ident()`:
+
+| Dialect | Quote style |
+|---|---|
+| SQL Server | `[name]` |
+| Oracle / Snowflake / DB2 / File | `"name"` |
 
 ### NotNull
 
 ```sql
-SELECT COUNT(*) FROM [schema].[table] WHERE [column] IS NULL
+SELECT COUNT(*) AS failing_count, COUNT(*) AS total_count
+FROM "schema"."table"
+WHERE "column" IS NULL
 ```
 
 ### Unique
 
 ```sql
-SELECT COUNT(*) FROM [schema].[table]
-WHERE [column] IN (
-  SELECT [column] FROM [schema].[table]
-  GROUP BY [column]
-  HAVING COUNT(*) > 1
+SELECT COUNT(*) AS failing_count, COUNT(*) AS total_count
+FROM "schema"."table"
+WHERE "column" IN (
+  SELECT "column" FROM "schema"."table"
+  GROUP BY "column" HAVING COUNT(*) > 1
 )
 ```
 
 ### MinValue / MaxValue
 
 ```sql
--- MinValue
-SELECT COUNT(*) FROM [schema].[table] WHERE [column] < {min}
-
--- MaxValue
-SELECT COUNT(*) FROM [schema].[table] WHERE [column] > {max}
+SELECT COUNT(*) AS failing_count, COUNT(*) AS total_count
+FROM "schema"."table" WHERE "column" < {min}
 ```
 
 ### Regex
 
-SQL Server does not natively support regex; syntax varies per dialect:
+Uses SQL LIKE pattern syntax (not regex):
 
-| Dialect | Syntax |
-|---|---|
-| SQL Server | `WHERE [col] NOT LIKE {approximation}` (limited) |
-| Oracle | `WHERE NOT REGEXP_LIKE([col], '{pattern}')` |
-| Snowflake | `WHERE NOT REGEXP_LIKE([col], '{pattern}')` |
-| DB2 | `WHERE REGEXP_LIKE([col], '{pattern}') = 0` |
-| SQLite (files) | `WHERE [col] NOT REGEXP '{pattern}'` |
+```sql
+SELECT COUNT(*) AS failing_count, COUNT(*) AS total_count
+FROM "schema"."table"
+WHERE "column" NOT LIKE '{pattern}'
+```
 
 ### CustomSql
 
-The SQL is executed as-is. Convention: the query must return a single integer representing the count of failing rows (0 = pass).
+Executed as-is. Must return exactly two columns: `failing_count` and `total_count`.
 
 ### RowCount
 
 ```sql
-SELECT COUNT(*) FROM [schema].[table]
--- passes if result is between min_rows and max_rows
+SELECT COUNT(*) AS total_count FROM "schema"."table"
+-- passes if result is between min and max (inclusive)
 ```
 
 ### ReferentialIntegrity
 
 ```sql
-SELECT COUNT(*) FROM [schema].[table] t
-WHERE t.[column] NOT IN (
-  SELECT r.[ref_column] FROM [ref_schema].[ref_table] r
+SELECT COUNT(*) AS failing_count, COUNT(*) AS total_count
+FROM "schema"."table"
+WHERE "column" NOT IN (
+  SELECT "ref_column" FROM "ref_schema"."ref_table"
 )
 ```
 
-When the reference table is on a different connection, the Rust command fetches distinct reference values first, then builds an `IN (...)` list in memory.
+When source and reference are on **different connections**, the reference values are fetched first into a Rust `Vec`, then inlined into an `IN (...)` clause.
 
 ---
 
@@ -582,69 +667,65 @@ When the reference table is on a different connection, the Rust command fetches 
 | Database | Connection params | Notes |
 |---|---|---|
 | **SQL Server** | host, port, username, password, database, trust_cert | `tiberius` async driver; pure-Rust TLS via `rustls` |
-| **Oracle** | host, port, username, password, service_name | Synchronous `oracle` crate; runs in `spawn_blocking` thread pool |
-| **Snowflake** | account, username, password, warehouse, database, schema | Uses Snowflake REST API; no binary driver required |
-| **DB2** | DSN, username, password | Requires OS ODBC driver manager + pre-configured DSN |
+| **Oracle** | host, port, username, password, service_name | Synchronous `oracle` crate; runs in `spawn_blocking` |
+| **Snowflake** | account, username, password, warehouse, database, schema | Snowflake REST API; no binary driver required |
+| **DB2** | host, port, database, username, password | Requires OS ODBC driver manager |
 | **CSV** | file path | Entire file loaded into in-memory SQLite at query time |
-| **Excel** | file path, sheet name | Specific sheet read via `calamine`; loaded into in-memory SQLite |
+| **Excel** | file path | All sheets available; each sheet is a table in in-memory SQLite |
 
 ---
 
 ## 9. Persistence & File Layout
 
-All application data is persisted as plain JSON. The app data directory is resolved via Tauri's `app_data_dir()` API.
+All application data is stored as plain JSON files. The data directory is configurable (see §10); it defaults to the platform app data directory.
 
-| File | Type | Content |
-|---|---|---|
-| `connections.json` | `HashMap<id, ConnectionInfo>` | All saved connections including credentials |
-| `rules.json` | `HashMap<id, Rule>` | All rule definitions |
-| `results.json` | `Vec<RuleResult>` | Most recent run batch results |
-| `results_history.json` | `Vec<RuleRunRecord>` | All historical run batches |
-| `profiling_runs.json` | `Vec<ProfilingRun>` | All profiling results |
-| `schedules.json` | `Vec<Schedule>` | All schedules |
+| File | Content |
+|---|---|
+| `connections.json` | `Vec<ConnectionInfo>` — all saved connections including credentials |
+| `rules.json` | `Vec<Rule>` — all rule definitions |
+| `results.json` | `Vec<RuleResult>` — most recent result per rule |
+| `results_history.json` | `Vec<RuleRunRecord>` — all historical run records across all batches |
+| `profiling_runs.json` | `Vec<ProfilingRun>` — all profiling results |
+| `schedules.json` | `Vec<Schedule>` — all schedules |
 
-Data is loaded into memory once at startup. Every mutation writes the full file back to disk immediately — there is no write-ahead log and no transactions.
+Every `list_*` command calls `reload()` before returning, so the in-memory cache is always fresh from disk. Every mutating command writes the full file back to disk immediately after the change.
 
-**Platform paths:**
+**Default platform paths:**
 - **Windows:** `%APPDATA%\dq-studio\`
 - **macOS:** `~/Library/Application Support/dq-studio/`
 - **Linux:** `~/.config/dq-studio/`
 
 ---
 
-## 10. Configuration Files
+## 10. Configuration
+
+### App Config (`app_config.json`)
+
+Stored at the **default** app data path, always. Contains:
+
+```json
+{ "data_dir": "/path/to/custom/dir" }
+```
+
+If `data_dir` is absent or the path doesn't exist, the default platform path is used.
+
+### Custom Data Directory
+
+The data directory can be changed in the Settings page. The new path is saved to `app_config.json` and takes effect on the next app restart. Data files are **not** moved automatically.
+
+Setting the data directory to a **shared location** (OneDrive folder, network share, etc.) enables team use: multiple users can point to the same directory and changes made by one user are automatically reflected in others' running instances via the file watcher.
 
 ### `tauri.conf.json`
 
-```json
-{
-  "identifier": "com.daanv.dq-studio",
-  "build": {
-    "frontendDist": "../dist",
-    "devUrl": "http://localhost:1420"
-  },
-  "app": {
-    "windows": [{ "width": 800, "height": 600 }]
-  },
-  "bundle": {
-    "targets": "all"
-  }
-}
-```
-
-- `identifier` — reverse-domain app ID, used by the OS for app data directory naming.
+- `identifier: "com.daanv.dq-studio"` — reverse-domain app ID; determines default app data directory name on all platforms.
 - `bundle.targets: "all"` — produces `.msi` (Windows), `.dmg` (macOS), `.AppImage` (Linux).
-- `devUrl` — Tauri dev mode loads the UI from this address; must match the Vite dev server port.
+- `devUrl` — Tauri dev mode loads the UI from this address; must match the Vite dev server port (default: 1420).
 
-### `src-tauri/Cargo.toml`
+### `Cargo.toml` highlights
 
-Two crate targets:
-- `[lib]` — the main library crate, imported by Tauri's build system.
-- `[[bin]] name = "dq-studio"` — thin binary entry point that calls `lib::run()`.
-
-Key dependency feature flags:
 - `tiberius`: `rustls` feature — pure-Rust TLS, no OpenSSL system dependency.
-- `tauri`: `shell-open` feature — allows opening URLs in the system browser.
+- `rusqlite`: `bundled` feature — SQLite compiled into the binary; no system SQLite required.
+- `notify`: version 6 — cross-platform file system watcher for live sync.
 
 ---
 
@@ -653,9 +734,9 @@ Key dependency feature flags:
 | Area | Current State | Risk |
 |---|---|---|
 | Credential storage | Plain JSON on disk, unencrypted | Anyone with filesystem access can read database passwords |
+| Shared data directory | All JSON files including credentials are readable by anyone with access to that directory | Shared OneDrive/network locations expose credentials to all users with folder access |
 | SQL execution | Rules run driver-validated SQL; `CustomSql` accepts arbitrary SQL | A malicious rule could run destructive SQL against connected databases |
-| Referential integrity (cross-connection) | Reference values fetched into memory, sent as `IN (...)` | Very large reference tables can exceed SQL `IN` clause limits or exhaust RAM |
-| CSV / Excel file loading | Entire file loaded into in-memory SQLite | Large files exhaust RAM |
+| Referential integrity (cross-connection) | Reference values fetched into memory and inlined into `IN (...)` | Very large reference tables can exhaust RAM or exceed SQL `IN` clause limits |
+| CSV / Excel file loading | Entire file loaded into in-memory SQLite | Large files can exhaust RAM |
 | Snowflake authentication | Username/password sent over HTTPS to Snowflake REST API | Standard HTTPS; credentials not cached beyond the request |
-| DB2 DSN | Credentials stored in OS ODBC data source, outside the app's JSON | Access depends on OS-level ODBC DSN security |
-| No app-level authentication | Single-user desktop app; no login screen | Not suitable for shared machines without OS access control |
+| No app-level authentication | Single-user desktop app; no login screen | Not suitable for shared machines without OS-level access control |

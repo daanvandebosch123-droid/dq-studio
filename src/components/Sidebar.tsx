@@ -1,8 +1,4 @@
-<<<<<<< HEAD
 import { Database, ShieldCheck, BarChart3, ScanSearch, History, CalendarClock, Settings } from "lucide-react";
-=======
-import { Database, ShieldCheck, BarChart3, ScanSearch, History, CalendarClock } from "lucide-react";
->>>>>>> origin/main
 import { NavLink } from "react-router-dom";
 
 const groups = [
@@ -72,7 +68,6 @@ export function Sidebar() {
           </div>
         ))}
       </nav>
-<<<<<<< HEAD
 
       <div className="border-t py-2" style={{ borderColor: "var(--border)" }}>
         <NavLink
@@ -92,8 +87,6 @@ export function Sidebar() {
           Settings
         </NavLink>
       </div>
-=======
->>>>>>> origin/main
     </aside>
   );
 }

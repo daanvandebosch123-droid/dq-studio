@@ -1,8 +1,5 @@
 import { useState, useEffect } from "react";
-<<<<<<< HEAD
 import { listen } from "@tauri-apps/api/event";
-=======
->>>>>>> origin/main
 import { History, ChevronDown, ChevronRight, Trash2, Loader2, X } from "lucide-react";
 import { api } from "../invoke";
 import type { ProfilingRun } from "../types";
@@ -96,15 +93,11 @@ export function ProfilingHistoryPage() {
     }
   }
 
-<<<<<<< HEAD
   useEffect(() => {
     load();
     const unlisten = listen("profiling://changed", () => load());
     return () => { unlisten.then(f => f()); };
   }, []);
-=======
-  useEffect(() => { load(); }, []);
->>>>>>> origin/main
 
   async function handleDelete(id: string) {
     await api.deleteProfilingRun(id);

@@ -185,7 +185,6 @@ fn load_excel_to_sqlite(path: &str, table: &str) -> Result<Connection, String> {
 // ── Query execution ────────────────────────────────────────────────────────
 
 fn run_query_on_sqlite(conn: &Connection, sql: &str, schema: &str, table: &str) -> Result<QueryResult, String> {
-<<<<<<< HEAD
     // Rules generate quoted identifiers ("file"."table") while profiling generates
     // unquoted ones (file.table). Replace both so SQLite receives just "table".
     let replacement = format!("\"{}\"", table);
@@ -194,11 +193,6 @@ fn run_query_on_sqlite(conn: &Connection, sql: &str, schema: &str, table: &str) 
     let adapted = sql
         .replace(&quoted_qualified, &replacement)
         .replace(&unquoted_qualified, &replacement);
-=======
-    // Replace "schema.table" → "table" (the SQLite table name, unquoted since we quoted it in CREATE TABLE)
-    let qualified = format!("{}.{}", schema, table);
-    let adapted = sql.replace(&qualified, &format!("\"{}\"", table));
->>>>>>> origin/main
 
     let mut stmt = conn.prepare(&adapted).map_err(|e| format!("SQLite prepare error: {}", e))?;
     let col_names: Vec<String> = stmt.column_names().iter().map(|s| s.to_string()).collect();
