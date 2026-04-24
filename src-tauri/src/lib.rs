@@ -3,26 +3,18 @@ mod persistence;
 mod state;
 mod commands;
 
-<<<<<<< HEAD
 use commands::config::ConfigState;
-=======
->>>>>>> origin/main
 use commands::rules::{RulesState, ResultsState, ResultsHistoryState};
 use commands::profiling::ProfilingState;
 use commands::scheduler::SchedulerState;
 use state::AppState;
-<<<<<<< HEAD
 use tauri::{Manager, Emitter};
-=======
-use tauri::Manager;
->>>>>>> origin/main
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
-<<<<<<< HEAD
             let default_data_dir = app.path().app_data_dir()
                 .expect("failed to resolve app data dir");
             std::fs::create_dir_all(&default_data_dir)?;
@@ -32,18 +24,12 @@ pub fn run() {
             std::fs::create_dir_all(&data_dir)?;
 
             app.manage(config_state);
-=======
-            let data_dir = app.path().app_data_dir()
-                .expect("failed to resolve app data dir");
-            std::fs::create_dir_all(&data_dir)?;
->>>>>>> origin/main
             app.manage(AppState::new(&data_dir));
             app.manage(RulesState::new(&data_dir));
             app.manage(ResultsState::new(&data_dir));
             app.manage(ResultsHistoryState::new(&data_dir));
             app.manage(ProfilingState::new(&data_dir));
             app.manage(SchedulerState::new(&data_dir));
-<<<<<<< HEAD
 
             // Watch the data directory and emit events when JSON files change.
             let app_handle = app.handle().clone();
@@ -86,11 +72,6 @@ pub fn run() {
             commands::config::get_settings,
             commands::config::set_data_dir,
             commands::config::pick_directory,
-=======
-            Ok(())
-        })
-        .invoke_handler(tauri::generate_handler![
->>>>>>> origin/main
             commands::connections::list_databases,
             commands::connections::pick_file,
             commands::connections::add_connection,

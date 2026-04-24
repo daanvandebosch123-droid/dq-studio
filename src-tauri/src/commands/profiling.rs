@@ -42,15 +42,12 @@ impl ProfilingState {
         Self { runs: std::sync::Mutex::new(runs), data_path }
     }
 
-<<<<<<< HEAD
     pub fn reload(&self) {
         let runs = crate::persistence::load::<Vec<ProfilingRun>>(&self.data_path)
             .unwrap_or_default();
         *self.runs.lock().unwrap() = runs;
     }
 
-=======
->>>>>>> origin/main
     pub fn save(&self) -> Result<(), String> {
         let runs = self.runs.lock().unwrap().clone();
         crate::persistence::save(&self.data_path, &runs)
@@ -276,10 +273,7 @@ pub async fn profile_table(
 pub async fn list_profiling_runs(
     profiling_state: State<'_, ProfilingState>,
 ) -> Result<Vec<ProfilingRun>, String> {
-<<<<<<< HEAD
     profiling_state.reload();
-=======
->>>>>>> origin/main
     let mut runs = profiling_state.runs.lock().unwrap().clone();
     runs.reverse();
     Ok(runs)

@@ -6,12 +6,10 @@
       "Bash(npx tsc *)",
       "Bash(cargo build *)",
       "Bash(echo \"EXIT:$?\")",
-<<<<<<< HEAD
       "Bash(npm run *)",
-      "Bash(ls -la \"D:\\\\\\\\DQ\\\\\\\\dq-studio-main\")"
-=======
-      "Bash(npm run *)"
->>>>>>> origin/main
+      "Bash(ls -la \"D:\\\\\\\\DQ\\\\\\\\dq-studio-main\")",
+      "Bash(npm run *)",
+      "Bash(git *)"
     ]
   }
 }
