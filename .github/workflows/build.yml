@@ -1,5 +1,8 @@
 name: Build Web App
 
+permissions:
+  contents: write
+
 on:
   push:
     branches: [ main ]
@@ -111,6 +114,4 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ github.ref_name }}
-          files: |
-            dist
-            windows
+          artifacts: "dist,windows"
