@@ -24,7 +24,9 @@ jobs:
         run: |
           corepack enable
           corepack prepare pnpm@latest --activate
-          pnpm install
+          pnpm install --frozen-lockfile
+          pnpm approve-builds --all
+          pnpm rebuild
 
       - name: Build (web)
         run: npm run build
@@ -68,7 +70,9 @@ jobs:
         run: |
           corepack enable
           corepack prepare pnpm@latest --activate
-          pnpm install
+          pnpm install --frozen-lockfile
+          pnpm approve-builds --all
+          pnpm rebuild
 
       - name: Build web assets
         run: npm run build
@@ -106,7 +110,9 @@ jobs:
         run: |
           corepack enable
           corepack prepare pnpm@latest --activate
-          pnpm install
+          pnpm install --frozen-lockfile
+          pnpm approve-builds --all
+          pnpm rebuild
 
       - name: Build web assets
         run: npm run build
