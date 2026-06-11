@@ -24,7 +24,7 @@ jobs:
         run: |
           corepack enable
           corepack prepare pnpm@latest --activate
-          pnpm install --frozen-lockfile
+          pnpm install --no-frozen-lockfile
           pnpm approve-builds --all
           pnpm rebuild
 
@@ -70,7 +70,7 @@ jobs:
         run: |
           corepack enable
           corepack prepare pnpm@latest --activate
-          pnpm install --frozen-lockfile
+          pnpm install --no-frozen-lockfile
           pnpm approve-builds --all
           pnpm rebuild
 
@@ -110,7 +110,7 @@ jobs:
         run: |
           corepack enable
           corepack prepare pnpm@latest --activate
-          pnpm install --frozen-lockfile
+          pnpm install --no-frozen-lockfile
           pnpm approve-builds --all
           pnpm rebuild
 
