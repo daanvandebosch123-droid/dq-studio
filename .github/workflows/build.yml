@@ -90,6 +90,35 @@ jobs:
           name: tauri-windows
           path: src-tauri/target/release/bundle
 
+      - name: Collect Windows EXE
+        shell: pwsh
+        run: |
+          $releaseDir = "release-assets"
+          New-Item -ItemType Directory -Force $releaseDir | Out-Null
+
+          $bundleExeFiles = Get-ChildItem -Recurse 'src-tauri/target/release/bundle' -Filter *.exe
+          $exe = $bundleExeFiles |
+            Where-Object { $_.FullName -match '\\nsis\\' -and $_.Name -notmatch 'updater' } |
+            Select-Object -First 1
+
+          if (-not $exe) {
+            $exe = $bundleExeFiles |
+              Where-Object { $_.Name -notmatch 'updater' } |
+              Select-Object -First 1
+          }
+
+          if (-not $exe) {
+            throw "No Windows EXE found in Tauri bundle output"
+          }
+
+          Copy-Item $exe.FullName $releaseDir
+
+      - name: Upload Windows EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-exe
+          path: release-assets/*.exe
+
   publish-release:
     needs: [build, tauri-build-windows]
     runs-on: ubuntu-latest
@@ -110,6 +139,12 @@ jobs:
           name: tauri-windows
           path: windows
 
+      - name: Download Windows EXE
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-exe
+          path: release-assets
+
       - name: Archive web build
         run: |
           cd dist
@@ -124,4 +159,4 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ github.ref_name }}
-          artifacts: "web-build.zip,tauri-windows.zip"
+          artifacts: "web-build.zip,tauri-windows.zip,release-assets/*.exe"
