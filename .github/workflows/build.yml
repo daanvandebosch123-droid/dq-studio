@@ -98,8 +98,30 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Download web build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: web-build
+          path: dist
+
+      - name: Download tauri Windows bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: tauri-windows
+          path: windows
+
+      - name: Archive web build
+        run: |
+          cd dist
+          zip -r ../web-build.zip .
+
+      - name: Archive Windows bundle
+        run: |
+          cd windows
+          zip -r ../tauri-windows.zip .
+
       - name: Create GitHub Release and upload artifacts
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ github.ref_name }}
-          artifacts: "web-build,tauri-windows"
+          files: "web-build.zip,tauri-windows.zip"
