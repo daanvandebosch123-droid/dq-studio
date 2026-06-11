@@ -124,4 +124,4 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ github.ref_name }}
-          files: "web-build.zip,tauri-windows.zip"
+          artifacts: "web-build.zip,tauri-windows.zip"
