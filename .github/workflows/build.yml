@@ -1,0 +1,138 @@
+name: Build Web App
+
+on:
+  push:
+    branches: [ main ]
+    tags: ['v*']
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build (web)
+        run: npm run build
+
+      - name: Upload web build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-build
+          path: dist
+
+  tauri-build:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+
+      - name: Install system packages for Tauri
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential curl libgtk-3-dev libwebkit2gtk-4.0-dev libssl-dev pkg-config
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web assets
+        run: npm run build
+
+      - name: Build Tauri app
+        run: npm run tauri build
+
+      - name: Upload Tauri bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: tauri-bundle
+          path: src-tauri/target/release/bundle
+
+  tauri-build-windows:
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web assets
+        run: npm run build
+
+      - name: Build Tauri (Windows)
+        run: npm run tauri build
+
+      - name: Upload Windows bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: tauri-windows
+          path: src-tauri/target/release/bundle/windows
+
+  publish-release:
+    needs: [tauri-build, tauri-build-windows]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download web build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: web-build
+
+      - name: Download tauri Linux bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: tauri-bundle
+
+      - name: Download tauri Windows bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: tauri-windows
+
+      - name: Create GitHub Release and upload artifacts
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ github.ref }}
+          files: |
+            dist/**
+            src-tauri/target/release/bundle/**
+            windows/**
