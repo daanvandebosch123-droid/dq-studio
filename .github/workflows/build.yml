@@ -76,11 +76,16 @@ jobs:
       - name: Build Tauri (Windows)
         run: npm run tauri build
 
+      - name: List Tauri bundle contents
+        shell: pwsh
+        run: |
+          if (Test-Path 'src-tauri/target/release/bundle') { Get-ChildItem -Recurse 'src-tauri/target/release/bundle' | Select-Object FullName } else { Write-Error 'Tauri bundle folder not found' }
+
       - name: Upload Windows bundle
         uses: actions/upload-artifact@v4
         with:
           name: tauri-windows
-          path: src-tauri/target/release/bundle/windows
+          path: src-tauri/target/release/bundle
 
   publish-release:
     needs: [build, tauri-build-windows]
