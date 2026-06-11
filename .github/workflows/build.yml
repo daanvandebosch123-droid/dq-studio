@@ -25,6 +25,11 @@ jobs:
           npm ci --no-optional
           npm rebuild
 
+      - name: Install Rollup native binary (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          npm i --no-save @rollup/rollup-linux-x64-gnu || true
+
       - name: Build (web)
         run: npm run build
 
@@ -68,6 +73,11 @@ jobs:
           npm ci --no-optional
           npm rebuild
 
+      - name: Install Rollup native binary (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          npm i --no-save @rollup/rollup-linux-x64-gnu || true
+
       - name: Build web assets
         run: npm run build
 
@@ -104,6 +114,12 @@ jobs:
         run: |
           npm ci --no-optional
           npm rebuild
+
+      - name: Install Rollup native binary (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          npm i --no-save @rollup/rollup-win32-x64-msvc || true
 
       - name: Build web assets
         run: npm run build
