@@ -90,34 +90,49 @@ jobs:
           name: tauri-windows
           path: src-tauri/target/release/bundle
 
-      - name: Collect Windows EXE
+      - name: Collect Windows program EXE
         shell: pwsh
         run: |
-          $releaseDir = "release-assets"
+          $releaseDir = "release-assets/program"
           New-Item -ItemType Directory -Force $releaseDir | Out-Null
 
-          $bundleExeFiles = Get-ChildItem -Recurse 'src-tauri/target/release/bundle' -Filter *.exe
-          $exe = $bundleExeFiles |
-            Where-Object { $_.FullName -match '\\nsis\\' -and $_.Name -notmatch 'updater' } |
+          $exe = Get-ChildItem 'src-tauri/target/release' -Filter *.exe |
+            Where-Object { $_.Name -notmatch 'updater' } |
             Select-Object -First 1
 
           if (-not $exe) {
-            $exe = $bundleExeFiles |
-              Where-Object { $_.Name -notmatch 'updater' } |
-              Select-Object -First 1
-          }
-
-          if (-not $exe) {
-            throw "No Windows EXE found in Tauri bundle output"
+            throw "No Windows program EXE found in target/release"
           }
 
           Copy-Item $exe.FullName $releaseDir
 
-      - name: Upload Windows EXE
+      - name: Upload Windows program EXE
         uses: actions/upload-artifact@v4
         with:
-          name: windows-exe
-          path: release-assets/*.exe
+          name: windows-program-exe
+          path: release-assets/program/*.exe
+
+      - name: Collect Windows installer EXE
+        shell: pwsh
+        run: |
+          $releaseDir = "release-assets/installer"
+          New-Item -ItemType Directory -Force $releaseDir | Out-Null
+
+          $exe = Get-ChildItem -Recurse 'src-tauri/target/release/bundle/nsis' -Filter *.exe |
+            Where-Object { $_.Name -notmatch 'updater' } |
+            Select-Object -First 1
+
+          if (-not $exe) {
+            throw "No Windows installer EXE found in bundle/nsis"
+          }
+
+          Copy-Item $exe.FullName $releaseDir
+
+      - name: Upload Windows installer EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer-exe
+          path: release-assets/installer/*.exe
 
   publish-release:
     needs: [build, tauri-build-windows]
@@ -139,11 +154,17 @@ jobs:
           name: tauri-windows
           path: windows
 
-      - name: Download Windows EXE
+      - name: Download Windows program EXE
         uses: actions/download-artifact@v4
         with:
-          name: windows-exe
-          path: release-assets
+          name: windows-program-exe
+          path: release-assets/program
+
+      - name: Download Windows installer EXE
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-installer-exe
+          path: release-assets/installer
 
       - name: Archive web build
         run: |
@@ -159,4 +180,4 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ github.ref_name }}
-          artifacts: "web-build.zip,tauri-windows.zip,release-assets/*.exe"
+          artifacts: "web-build.zip,tauri-windows.zip,release-assets/program/*.exe,release-assets/installer/*.exe"
